@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import csv
 import json
 
+from qchem_workbench.backends.gaussian_parser import parse_gaussian_output
 from qchem_workbench.backends.pyscf_backend import MissingOptionalDependencyError
 from qchem_workbench.cli import main
 from qchem_workbench.core.result import CalculationResult
@@ -409,3 +411,93 @@ def test_render_gaussian_run_script_requires_job_folders(tmp_path):
     )
 
     assert exit_code == 1
+
+
+def test_parse_gaussian_scans_recursively_and_writes_json(tmp_path):
+    outputs = tmp_path / "outputs"
+    nested = outputs / "nested"
+    nested.mkdir(parents=True)
+    (outputs / "water.log").write_text(
+        " # wb97xd/6-31g\n"
+        " SCF Done:  E(RB3LYP) =  -76.1000000000     A.U. after 10 cycles\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+    (nested / "co2.out").write_text(
+        " # wb97xd/6-31g\n"
+        " SCF Done:  E(RB3LYP) =  -188.2000000000     A.U. after 10 cycles\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+    (outputs / "ignore.txt").write_text("not a Gaussian output\n", encoding="utf-8")
+    out_path = tmp_path / "results" / "gaussian_results.json"
+
+    exit_code = main(["parse-gaussian", str(outputs), "--out", str(out_path)])
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert payload["parser"] == "gaussian"
+    assert [result["species_name"] for result in payload["results"]] == [
+        "co2",
+        "water",
+    ]
+
+
+def test_parse_gaussian_writes_csv(tmp_path):
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    (outputs / "freq.log").write_text(
+        " # wb97xd/6-31g freq\n"
+        " Frequencies --   -10.0   250.0\n"
+        " SCF Done:  E(RB3LYP) =  -1.0000000000     A.U. after 3 cycles\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "results" / "gaussian_results.json"
+    csv_path = tmp_path / "results" / "gaussian_results.csv"
+
+    exit_code = main(
+        [
+            "parse-gaussian",
+            str(outputs),
+            "--out",
+            str(out_path),
+            "--csv",
+            str(csv_path),
+        ]
+    )
+
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert exit_code == 0
+    assert rows[0]["species_name"] == "freq"
+    assert rows[0]["negative_frequency_count"] == "1"
+    assert rows[0]["most_negative_frequency_cm1"] == "-10.0"
+
+
+def test_parse_gaussian_continues_on_parser_exception(tmp_path, monkeypatch):
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    (outputs / "bad.log").write_text("synthetic malformed output\n", encoding="utf-8")
+    (outputs / "good.log").write_text(
+        " # hf/sto-3g\n Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "results" / "gaussian_results.json"
+
+    def fake_parse(path):
+        if path.name == "bad.log":
+            raise ValueError("synthetic parser failure")
+        return parse_gaussian_output(path)
+
+    monkeypatch.setattr("qchem_workbench.cli.parse_gaussian_output", fake_parse)
+
+    exit_code = main(["parse-gaussian", str(outputs), "--out", str(out_path)])
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    failed = [result for result in payload["results"] if not result["success"]]
+    assert exit_code == 0
+    assert len(payload["results"]) == 2
+    assert any(
+        "synthetic parser failure" in result["warnings"][0] for result in failed
+    )
