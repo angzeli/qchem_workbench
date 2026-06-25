@@ -157,6 +157,29 @@ Calculation results keep physically distinct quantities in separate fields:
 The result store is transparent JSON. It preserves warnings, metadata, source
 paths, and missing values.
 
+Stable result fields in v1.0 are:
+
+- `species_name`
+- `backend`
+- `method`
+- `basis`
+- `task`
+- `success`
+- `electronic_energy_hartree`
+- `gibbs_free_energy_hartree`
+- `zero_point_correction_hartree`
+- `thermal_correction_energy_hartree`
+- `thermal_correction_enthalpy_hartree`
+- `thermal_correction_gibbs_hartree`
+- `sum_electronic_zero_point_energy_hartree`
+- `sum_electronic_thermal_free_energy_hartree`
+- `homo_ev`
+- `lumo_ev`
+- `gap_ev`
+- `warnings`
+- `metadata`
+- `source_path`
+
 ## Reaction Table Workflow
 
 Pathway YAML files define stoichiometric bookkeeping only:

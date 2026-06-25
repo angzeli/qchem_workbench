@@ -23,6 +23,23 @@ backend integrations:
 Core modules must stay generic. Domain examples such as CO2RR belong under
 `examples/`, not in core code.
 
+## Public API Stability
+
+For v1.0, the stable public Python API is the set of names exported through
+package-level `__all__` values in:
+
+- `qchem_workbench`
+- `qchem_workbench.core`
+- `qchem_workbench.analysis`
+- `qchem_workbench.backends`
+- `qchem_workbench.projects`
+- `qchem_workbench.reports`
+- `qchem_workbench.results`
+
+Underscore-prefixed helpers and unexported implementation details are private.
+The CLI command names shown by `qchemwb --help` are the stable v1.0 command
+surface.
+
 ## Core Models
 
 `Species` describes a molecular species with name, formula, charge,
@@ -61,15 +78,26 @@ Result JSON uses a transparent top-level object with `schema_version` and a
 
 Important separated fields include:
 
+- `species_name`
+- `backend`
+- `method`
+- `basis`
+- `task`
+- `success`
 - `electronic_energy_hartree`
+- `gibbs_free_energy_hartree`
 - `zero_point_correction_hartree`
 - `thermal_correction_energy_hartree`
 - `thermal_correction_enthalpy_hartree`
 - `thermal_correction_gibbs_hartree`
-- `gibbs_free_energy_hartree`
 - `sum_electronic_zero_point_energy_hartree`
 - `sum_electronic_thermal_free_energy_hartree`
-- `homo_ev`, `lumo_ev`, and `gap_ev`
+- `homo_ev`
+- `lumo_ev`
+- `gap_ev`
+- `warnings`
+- `metadata`
+- `source_path`
 
 Do not collapse these quantities into a single generic energy field.
 
