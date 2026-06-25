@@ -1,0 +1,11 @@
+schema_version: 1
+reactions:
+  - id: isomerisation_1
+    label: Isomer A to isomer B
+    reactants:
+      isomer_a: 1
+    products:
+      isomer_b: 1
+    electrons: 0
+    protons: 0
+    notes: Generic illustrative molecular bookkeeping example.

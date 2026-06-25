@@ -67,6 +67,20 @@ Gaussian thermochemistry parsing keeps corrections and totals separate:
 - `sum_electronic_zero_point_energy_hartree`
 - `sum_electronic_thermal_free_energy_hartree`
 
+## Example Pathways
+
+Generic pathway example:
+
+- `examples/pathways/basic_isomerisation.yaml`
+
+Illustrative CO2RR molecular bookkeeping examples:
+
+- `examples/pathways/co2rr/co_pathway.yaml`
+- `examples/pathways/co2rr/formate_pathway.yaml`
+
+The CO2RR examples are not complete mechanisms and do not include
+electrochemical or standard-state corrections.
+
 ## Species Registry
 
 Species registries are YAML files with `schema_version: 1` and a `species`

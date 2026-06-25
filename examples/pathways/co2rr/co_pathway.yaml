@@ -1,0 +1,11 @@
+schema_version: 1
+reactions:
+  - id: co2_to_co_bookkeeping
+    label: Illustrative CO2 to CO molecular bookkeeping
+    reactants:
+      co2: 1
+    products:
+      co: 1
+    electrons: 0
+    protons: 0
+    notes: Illustrative CO2RR molecular bookkeeping example; not a complete mechanism and no electrochemical corrections are applied.
