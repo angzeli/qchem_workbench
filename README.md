@@ -1,91 +1,129 @@
-# qchem-workbench
+# 🧪 qchem-workbench
 
-qchem-workbench is a backend-agnostic workflow manager for quantum-chemistry
-projects. It helps organize molecular inputs, calculation outputs, parsed
-results, and reports across supported backends.
+## 🔬 Backend-agnostic quantum-chemistry workflow management
 
-This project does not implement DFT or other quantum-chemistry methods from
-scratch. It is a workflow layer around external engines and file formats.
+qchem-workbench is a Python package and CLI for organizing quantum-chemistry
+workflows. It helps manage species registries, input files, calculation outputs,
+parsed result collections, quality checks, reaction-energy tables, plots, and
+Markdown reports across supported backends.
 
-Initial planned backends and integrations include:
+qchem-workbench is not a quantum-chemistry engine. It does not implement DFT,
+wavefunction methods, molecular dynamics, thermochemistry corrections, or
+electrochemical corrections from scratch. It does not replace Gaussian, PySCF,
+ORCA, Quantum ESPRESSO, VASP, or any other electronic-structure code.
 
-- PySCF workflows.
-- Gaussian input and output support.
+The current workflow support focuses on:
 
-## Development
+- PySCF single-point calculations through an optional backend.
+- Gaussian input rendering without running Gaussian.
+- Gaussian output parsing from `.log` and `.out` files.
+- Generic species, result, quality-check, reaction, report, and project
+  manifest utilities.
 
-Run the test suite with:
+CO2RR is included as the first domain example, not as the scope of the package.
+Core modules remain generic and backend-agnostic.
+
+## Installation
+
+For local development:
+
+```bash
+pip install -e .
+```
+
+For the optional PySCF backend:
+
+```bash
+pip install -e ".[pyscf]"
+```
+
+Run the test suite:
 
 ```bash
 python -m pytest
 ```
 
-Show CLI help with:
+Show CLI help:
 
 ```bash
 qchemwb --help
 ```
 
-Create and validate a starter workflow directory with:
+## Quickstart
+
+Create a starter workflow directory and validate its species registry:
 
 ```bash
 qchemwb init demo --template basic
 qchemwb validate demo/species.yaml
 ```
 
-Run PySCF single-point calculations when the optional PySCF dependency is
-installed:
+Render Gaussian input files without running Gaussian:
+
+```bash
+qchemwb render-gaussian demo/species.yaml --method wb97xd --basis 6-31g --task single_point --out demo/gaussian_inputs
+```
+
+Parse Gaussian-like outputs:
+
+```bash
+qchemwb parse-gaussian demo/outputs --out demo/results/gaussian_results.json
+```
+
+Run quality checks and write a Markdown report:
+
+```bash
+qchemwb check-results demo/results/gaussian_results.json --species demo/species.yaml
+qchemwb report demo/results/gaussian_results.json --species demo/species.yaml --out demo/reports/report.md
+```
+
+## PySCF Backend
+
+The PySCF backend is optional. Base package imports and most CLI commands work
+without PySCF installed. When PySCF is available, qchem-workbench can run simple
+molecular single-point calculations:
 
 ```bash
 qchemwb run-pyscf demo/species.yaml --method b3lyp --basis sto-3g --out demo/results/pyscf_results.json
 ```
 
-Render a Gaussian route from a calculation spec in Python:
+Current PySCF support is intentionally narrow: molecular single-point
+calculations only. The workflow manager records electronic energies and basic
+metadata; it does not overinterpret those values.
 
-```python
-from qchem_workbench.backends.gaussian_input import gaussian_route_from_spec
-from qchem_workbench.core.calculation import CalculationSpec
+## Gaussian Input And Output
 
-spec = CalculationSpec(
-    backend="gaussian",
-    method="wb97xd",
-    basis="6-31+G(d,p)",
-    task="opt_freq",
-    solvent="smd,solvent=water",
-)
-route = gaussian_route_from_spec(spec)
+Gaussian input rendering writes `.gjf` files from species registries and generic
+calculation settings:
+
+```bash
+qchemwb render-gaussian examples/basic_molecules/species.yaml --method wb97xd --basis 6-31g --task single_point --out /tmp/qchemwb-basic-gaussian --force
 ```
 
-## Parsed Result Fields
+Optional job-folder and scheduler-script templates are available:
 
-Gaussian thermochemistry parsing keeps corrections and totals separate:
+```bash
+qchemwb render-gaussian examples/basic_molecules/species.yaml --method wb97xd --basis 6-31g --task single_point --out /tmp/qchemwb-basic-jobs --job-folders --scheduler slurm --force
+```
 
-- `zero_point_correction_hartree`
-- `thermal_correction_energy_hartree`
-- `thermal_correction_enthalpy_hartree`
-- `thermal_correction_gibbs_hartree`
-- `sum_electronic_zero_point_energy_hartree`
-- `sum_electronic_thermal_free_energy_hartree`
+Scheduler scripts are templates only and require local adaptation. qchem-workbench
+does not execute Gaussian and does not require a Gaussian installation for input
+rendering or output parsing.
 
-## Example Pathways
+Gaussian output parsing scans `.log` and `.out` files and stores a JSON result
+collection:
 
-Generic pathway example:
+```bash
+qchemwb parse-gaussian examples/basic_molecules/outputs --out /tmp/qchemwb-basic-results.json
+```
 
-- `examples/pathways/basic_isomerisation.yaml`
+Missing parsed values remain missing. Parser warnings are recorded rather than
+filled with invented values.
 
-Illustrative CO2RR molecular bookkeeping examples:
+## Species Registry Format
 
-- `examples/co2rr_molecular/`
-- `examples/pathways/co2rr/co_pathway.yaml`
-- `examples/pathways/co2rr/formate_pathway.yaml`
-
-The CO2RR examples are not complete mechanisms and do not include
-electrochemical or standard-state corrections.
-
-## Species Registry
-
-Species registries are YAML files with `schema_version: 1` and a `species`
-list. Geometry paths may be relative to the registry file.
+Species registries are YAML files with `schema_version: 1` and a `species` list.
+Geometry paths may be relative to the registry file.
 
 ```yaml
 schema_version: 1
@@ -98,3 +136,132 @@ species:
     tags: [demo]
     notes: Example molecule
 ```
+
+The core species model is backend-independent. PySCF spin is derived only when
+the PySCF backend needs it.
+
+## Result Schema Overview
+
+Calculation results keep physically distinct quantities in separate fields:
+
+- `electronic_energy_hartree`
+- `zero_point_correction_hartree`
+- `thermal_correction_energy_hartree`
+- `thermal_correction_enthalpy_hartree`
+- `thermal_correction_gibbs_hartree`
+- `gibbs_free_energy_hartree`
+- `sum_electronic_zero_point_energy_hartree`
+- `sum_electronic_thermal_free_energy_hartree`
+- orbital summaries such as `homo_ev`, `lumo_ev`, and `gap_ev` when available
+
+The result store is transparent JSON. It preserves warnings, metadata, source
+paths, and missing values.
+
+## Reaction Table Workflow
+
+Pathway YAML files define stoichiometric bookkeeping only:
+
+```yaml
+schema_version: 1
+reactions:
+  - id: r1
+    label: A to B
+    reactants:
+      A: 1
+    products:
+      B: 1
+```
+
+Compute electronic reaction energies:
+
+```bash
+qchemwb reaction-table examples/pathways/basic_isomerisation.yaml /tmp/qchemwb-basic-results.json --quantity electronic --out /tmp/qchemwb-reaction-table.csv
+```
+
+Compute Gibbs free-energy differences only when stored Gibbs values are present:
+
+```bash
+qchemwb reaction-table examples/pathways/basic_isomerisation.yaml /tmp/qchemwb-basic-results.json --quantity gibbs --out /tmp/qchemwb-gibbs-table.csv
+```
+
+Electronic and Gibbs modes do not fall back to each other. No electrochemical or
+standard-state corrections are applied.
+
+## Quality Checks And Triage
+
+Quality checks are conservative and generic:
+
+```bash
+qchemwb check-results /tmp/qchemwb-basic-results.json --species examples/basic_molecules/species.yaml
+```
+
+They report issues such as failed calculations, missing electronic energies,
+missing method or basis fields, imaginary frequencies, missing frequency
+thermochemistry, possible spin contamination when expected spin is available,
+and mixed backend/method/basis result sets.
+
+Failed-job triage writes a Markdown summary:
+
+```bash
+qchemwb triage /tmp/qchemwb-basic-results.json --out /tmp/qchemwb-failed-jobs.md
+```
+
+Triage suggestions are conservative. They direct users to inspect source files
+and warnings rather than prescribing fake fixes.
+
+## Project Manifests
+
+Project manifests are optional YAML files for explicit batch workflows:
+
+```yaml
+schema_version: 1
+project:
+  name: demo
+  species: species.yaml
+  results: results/results.json
+  reports: reports/report.md
+  steps: [parse_gaussian, quality_checks, report]
+```
+
+Run configured steps:
+
+```bash
+qchemwb run-project qchem_project.yaml
+```
+
+Only listed steps run. The command does not execute Gaussian.
+
+## Examples
+
+CO2RR molecular workflow example:
+
+- `examples/co2rr_molecular/`
+- `examples/pathways/co2rr/co_pathway.yaml`
+- `examples/pathways/co2rr/formate_pathway.yaml`
+
+This is an illustrative molecular workflow, not a complete CO2RR mechanism.
+Synthetic outputs are labelled as synthetic and should not be used as
+scientific data.
+
+Basic molecule tutorial:
+
+- `examples/basic_molecules/`
+
+Generic pathway example:
+
+- `examples/pathways/basic_isomerisation.yaml`
+
+## Scientific Caveats
+
+- Do not invent chemical data, thermochemical corrections, or scientific claims.
+- Do not silently accept failed calculations.
+- Keep electronic energies, thermal corrections, Gibbs free energies, and
+  reaction energies separate.
+- Missing parsed values should remain missing and should produce warnings.
+- Synthetic fixture data is for parser and workflow testing only.
+- Reaction tables use a products-minus-reactants sign convention and apply no
+  unrequested corrections.
+
+## Author
+
+Angze Li
