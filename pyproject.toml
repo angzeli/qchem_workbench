@@ -16,6 +16,11 @@ dependencies = [
   "PyYAML>=6",
 ]
 
+[project.optional-dependencies]
+pyscf = [
+  "pyscf>=2",
+]
+
 [project.scripts]
 qchemwb = "qchem_workbench.cli:main"
 
