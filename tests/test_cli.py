@@ -791,3 +791,43 @@ def test_reaction_table_missing_data(tmp_path):
     assert rows[0]["complete"] == "False"
     assert rows[0]["missing_species"] == "B"
     assert rows[0]["delta_hartree"] == ""
+
+
+def test_report_command_writes_markdown(tmp_path, capsys):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    results_path = project_path / "results" / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-76.0,
+            )
+        ],
+    )
+    out_path = project_path / "reports" / "report.md"
+
+    exit_code = main(
+        [
+            "report",
+            str(results_path),
+            "--species",
+            str(project_path / "species.yaml"),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    report = out_path.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "Wrote Markdown report" in captured.out
+    assert "# qchem-workbench report" in report
+    assert "## Quality-check summary" in report
+    assert "unmatched_species" in report

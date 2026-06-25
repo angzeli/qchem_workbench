@@ -31,6 +31,7 @@ from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.registry import load_species_registry
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
+from qchem_workbench.reports.markdown import write_markdown_report
 from qchem_workbench.results.store import load_result_collection
 from qchem_workbench.templates.project import (
     PROJECT_DIRECTORIES,
@@ -141,6 +142,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reaction_table_parser.add_argument("--out", required=True, type=Path)
     reaction_table_parser.set_defaults(func=_reaction_table_command)
+
+    report_parser = subparsers.add_parser(
+        "report", help="generate a Markdown workflow report"
+    )
+    report_parser.add_argument("results", type=Path)
+    report_parser.add_argument("--species", type=Path)
+    report_parser.add_argument("--out", required=True, type=Path)
+    report_parser.set_defaults(func=_report_command)
     return parser
 
 
@@ -291,6 +300,27 @@ def _reaction_table_command(args: argparse.Namespace) -> int:
             f"{row.reaction_id}\t{row.quantity}\t{row.complete}\t"
             f"{delta_hartree}\t{';'.join(row.missing_species)}"
         )
+    return 0
+
+
+def _report_command(args: argparse.Namespace) -> int:
+    try:
+        results = load_result_collection(args.results)
+        species = (
+            load_species_registry(args.species) if args.species is not None else None
+        )
+        checks = _quality_checks_for_results(results, args.species)
+        write_markdown_report(
+            args.out,
+            results,
+            species=species,
+            quality_checks=checks,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote Markdown report to {args.out}.")
     return 0
 
 
