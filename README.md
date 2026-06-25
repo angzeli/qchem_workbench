@@ -56,6 +56,17 @@ spec = CalculationSpec(
 route = gaussian_route_from_spec(spec)
 ```
 
+## Parsed Result Fields
+
+Gaussian thermochemistry parsing keeps corrections and totals separate:
+
+- `zero_point_correction_hartree`
+- `thermal_correction_energy_hartree`
+- `thermal_correction_enthalpy_hartree`
+- `thermal_correction_gibbs_hartree`
+- `sum_electronic_zero_point_energy_hartree`
+- `sum_electronic_thermal_free_energy_hartree`
+
 ## Species Registry
 
 Species registries are YAML files with `schema_version: 1` and a `species`

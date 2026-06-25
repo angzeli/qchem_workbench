@@ -12,6 +12,30 @@ _SCF_DONE_RE = re.compile(
     r"SCF Done:\s+E\([^)]+\)\s+=\s+([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
 )
 _ROUTE_START_RE = re.compile(r"^\s*#")
+_THERMOCHEMISTRY_PATTERNS = {
+    "zero_point_correction_hartree": re.compile(
+        r"Zero-point correction=\s+([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
+    ),
+    "thermal_correction_energy_hartree": re.compile(
+        r"Thermal correction to Energy=\s+([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
+    ),
+    "thermal_correction_enthalpy_hartree": re.compile(
+        r"Thermal correction to Enthalpy=\s+([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
+    ),
+    "thermal_correction_gibbs_hartree": re.compile(
+        r"Thermal correction to Gibbs Free Energy=\s+"
+        r"([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
+    ),
+    "sum_electronic_zero_point_energy_hartree": re.compile(
+        r"Sum of electronic and zero-point Energies=\s+"
+        r"([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
+    ),
+    "sum_electronic_thermal_free_energy_hartree": re.compile(
+        r"Sum of electronic and thermal Free Energies=\s+"
+        r"([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
+    ),
+}
+_THERMOCHEMISTRY_KEYS = tuple(_THERMOCHEMISTRY_PATTERNS)
 
 
 def parse_gaussian_output(path: Path) -> CalculationResult:
@@ -53,6 +77,8 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
     else:
         warnings.append("SCF electronic energy was not found.")
 
+    thermochemistry = _extract_thermochemistry(text, warnings)
+
     metadata = {
         "normal_termination": normal_termination,
         "error_termination": error_termination,
@@ -68,6 +94,27 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
         task=None,
         success=normal_termination and not error_termination,
         electronic_energy_hartree=electronic_energy,
+        gibbs_free_energy_hartree=thermochemistry.get(
+            "sum_electronic_thermal_free_energy_hartree"
+        ),
+        zero_point_correction_hartree=thermochemistry.get(
+            "zero_point_correction_hartree"
+        ),
+        thermal_correction_energy_hartree=thermochemistry.get(
+            "thermal_correction_energy_hartree"
+        ),
+        thermal_correction_enthalpy_hartree=thermochemistry.get(
+            "thermal_correction_enthalpy_hartree"
+        ),
+        thermal_correction_gibbs_hartree=thermochemistry.get(
+            "thermal_correction_gibbs_hartree"
+        ),
+        sum_electronic_zero_point_energy_hartree=thermochemistry.get(
+            "sum_electronic_zero_point_energy_hartree"
+        ),
+        sum_electronic_thermal_free_energy_hartree=thermochemistry.get(
+            "sum_electronic_thermal_free_energy_hartree"
+        ),
         warnings=warnings,
         metadata=metadata,
         source_path=source_path,
@@ -92,3 +139,52 @@ def _extract_route(text: str) -> str | None:
 
 def _parse_float(value: str) -> float:
     return float(value.replace("D", "E").replace("d", "e"))
+
+
+def _extract_thermochemistry(
+    text: str, warnings: list[str]
+) -> dict[str, float | None]:
+    sections = _thermochemistry_sections(text)
+    if not sections:
+        return {}
+
+    complete_sections = [
+        section
+        for section in sections
+        if all(key in section for key in _THERMOCHEMISTRY_KEYS)
+    ]
+    if complete_sections:
+        if len(complete_sections) > 1:
+            warnings.append(
+                "Multiple complete thermochemistry sections found; using the last."
+            )
+        return complete_sections[-1]
+
+    warnings.append("Incomplete Gaussian thermochemistry section found.")
+    return sections[-1]
+
+
+def _thermochemistry_sections(text: str) -> list[dict[str, float | None]]:
+    sections: list[dict[str, float | None]] = []
+    current: dict[str, float | None] = {}
+
+    for line in text.splitlines():
+        parsed_key = None
+        parsed_value = None
+        for key, pattern in _THERMOCHEMISTRY_PATTERNS.items():
+            match = pattern.search(line)
+            if match:
+                parsed_key = key
+                parsed_value = _parse_float(match.group(1))
+                break
+
+        if parsed_key is None:
+            continue
+        if parsed_key == "zero_point_correction_hartree" and current:
+            sections.append(current)
+            current = {}
+        current[parsed_key] = parsed_value
+
+    if current:
+        sections.append(current)
+    return sections
