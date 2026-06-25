@@ -102,3 +102,11 @@ def test_unsupported_schema_version_is_error(tmp_path):
 
     with pytest.raises(ValueError, match="unsupported schema_version"):
         load_species_registry(registry_path)
+
+
+def test_missing_schema_version_is_error(tmp_path):
+    registry_path = tmp_path / "species.yaml"
+    registry_path.write_text("species: []\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing schema_version"):
+        load_species_registry(registry_path)

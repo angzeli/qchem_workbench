@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.results.store import (
     append_results,
@@ -39,6 +41,22 @@ def test_save_and_load_result_collection(tmp_path):
     assert len(loaded) == 1
     assert loaded[0].species_name == "water"
     assert loaded[0].source_path == Path("outputs/water.log")
+
+
+def test_result_collection_missing_schema_version_is_error(tmp_path):
+    path = tmp_path / "results.json"
+    path.write_text('{"results": []}\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing schema_version"):
+        load_result_collection(path)
+
+
+def test_result_collection_unsupported_schema_version_is_error(tmp_path):
+    path = tmp_path / "results.json"
+    path.write_text('{"schema_version": 99, "results": []}\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsupported schema_version"):
+        load_result_collection(path)
 
 
 def test_append_results(tmp_path):

@@ -37,6 +37,14 @@ def load_result_collection(path: Path) -> list[CalculationResult]:
     data = json.loads(input_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{input_path}: result collection must be a JSON object")
+    if "schema_version" not in data:
+        raise ValueError(f"{input_path}: missing schema_version")
+    schema_version = data["schema_version"]
+    if schema_version != RESULT_COLLECTION_SCHEMA_VERSION:
+        raise ValueError(
+            f"{input_path}: unsupported schema_version {schema_version!r}; "
+            f"expected {RESULT_COLLECTION_SCHEMA_VERSION}"
+        )
 
     results = data.get("results")
     if not isinstance(results, list):

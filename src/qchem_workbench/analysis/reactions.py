@@ -50,7 +50,9 @@ def load_pathway(path: Path, species_registry: list[Species] | None = None) -> P
     pathway_path = Path(path)
     data = _load_yaml_mapping(pathway_path)
 
-    schema_version = data.get("schema_version")
+    if "schema_version" not in data:
+        raise ValueError(f"{pathway_path}: missing schema_version")
+    schema_version = data["schema_version"]
     if schema_version != PATHWAY_SCHEMA_VERSION:
         raise ValueError(
             f"{pathway_path}: unsupported schema_version {schema_version!r}; "

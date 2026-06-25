@@ -121,6 +121,22 @@ def test_pathway_supports_integer_and_float_coefficients(tmp_path):
     assert reaction.products["B"] == 0.5
 
 
+def test_pathway_missing_schema_version_is_error(tmp_path):
+    pathway_path = tmp_path / "pathway.yaml"
+    pathway_path.write_text("reactions: []\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing schema_version"):
+        load_pathway(pathway_path)
+
+
+def test_pathway_unsupported_schema_version_is_error(tmp_path):
+    pathway_path = tmp_path / "pathway.yaml"
+    pathway_path.write_text("schema_version: 99\nreactions: []\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsupported schema_version"):
+        load_pathway(pathway_path)
+
+
 def test_reaction_electronic_energy_a_to_b(tmp_path):
     pathway_path = tmp_path / "pathway.yaml"
     pathway_path.write_text(

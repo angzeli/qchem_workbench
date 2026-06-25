@@ -140,6 +140,20 @@ species:
 The core species model is backend-independent. PySCF spin is derived only when
 the PySCF backend needs it.
 
+## Schema Versioning
+
+Public workflow files use explicit schema versions. The current schema version
+is `1` for:
+
+- species registries;
+- result collections;
+- pathway files;
+- project manifests.
+
+Missing `schema_version` fields and unsupported schema versions are rejected
+with clear errors. qchem-workbench does not silently reinterpret unknown schema
+versions.
+
 ## Result Schema Overview
 
 Calculation results keep physically distinct quantities in separate fields:

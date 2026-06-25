@@ -18,7 +18,9 @@ def load_species_registry(path: Path) -> list[Species]:
     registry_path = Path(path)
     data = _load_yaml_mapping(registry_path)
 
-    schema_version = data.get("schema_version")
+    if "schema_version" not in data:
+        raise ValueError(f"{registry_path}: missing schema_version")
+    schema_version = data["schema_version"]
     if schema_version != SUPPORTED_SCHEMA_VERSION:
         raise ValueError(
             f"{registry_path}: unsupported schema_version {schema_version!r}; "

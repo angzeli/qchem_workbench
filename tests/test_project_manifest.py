@@ -100,3 +100,18 @@ def test_manifest_unsupported_schema_version(tmp_path):
 
     with pytest.raises(ValueError, match="unsupported schema_version"):
         load_project_manifest(manifest_path)
+
+
+def test_manifest_missing_schema_version(tmp_path):
+    species_path = tmp_path / "species.yaml"
+    species_path.write_text("schema_version: 1\nspecies: []\n", encoding="utf-8")
+    manifest_path = tmp_path / "qchem_project.yaml"
+    manifest_path.write_text(
+        "project:\n"
+        "  name: demo\n"
+        "  species: species.yaml\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="missing schema_version"):
+        load_project_manifest(manifest_path)

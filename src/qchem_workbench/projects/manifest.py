@@ -82,7 +82,9 @@ def load_project_manifest(path: Path) -> ProjectManifest:
 
     manifest_path = Path(path)
     data = _load_yaml_mapping(manifest_path)
-    schema_version = data.get("schema_version")
+    if "schema_version" not in data:
+        raise ValueError(f"{manifest_path}: missing schema_version")
+    schema_version = data["schema_version"]
     if schema_version != PROJECT_MANIFEST_SCHEMA_VERSION:
         raise ValueError(
             f"{manifest_path}: unsupported schema_version {schema_version!r}; "

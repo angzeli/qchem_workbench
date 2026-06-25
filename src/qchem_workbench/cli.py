@@ -42,7 +42,10 @@ from qchem_workbench.reports.triage import (
     classify_triage_results,
     write_failed_jobs_report,
 )
-from qchem_workbench.results.store import load_result_collection
+from qchem_workbench.results.store import (
+    RESULT_COLLECTION_SCHEMA_VERSION,
+    load_result_collection,
+)
 from qchem_workbench.templates.project import (
     PROJECT_DIRECTORIES,
     TEMPLATE_NAMES,
@@ -587,7 +590,7 @@ def _write_result_collection(
     path: Path, spec: CalculationSpec, results: list[CalculationResult]
 ) -> None:
     payload = {
-        "schema_version": 1,
+        "schema_version": RESULT_COLLECTION_SCHEMA_VERSION,
         "calculation": spec.to_dict(),
         "results": [result.to_dict() for result in results],
     }
@@ -768,7 +771,7 @@ def _write_parsed_result_collection(
     path: Path, results: list[CalculationResult]
 ) -> None:
     payload = {
-        "schema_version": 1,
+        "schema_version": RESULT_COLLECTION_SCHEMA_VERSION,
         "parser": "gaussian",
         "results": [result.to_dict() for result in results],
     }

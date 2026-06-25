@@ -76,6 +76,11 @@ Result JSON uses a transparent top-level object with `schema_version` and a
 `results` list. Individual result dictionaries are produced by
 `CalculationResult.to_dict()` and restored with `CalculationResult.from_dict()`.
 
+Current schema version is `1`. Species registries, result collections, pathway
+files, and project manifests all require a top-level `schema_version`. Missing
+or unsupported versions must raise clear errors rather than being interpreted
+implicitly.
+
 Important separated fields include:
 
 - `species_name`
