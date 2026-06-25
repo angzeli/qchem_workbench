@@ -218,3 +218,91 @@ def test_run_pyscf_reports_missing_optional_dependency(
     assert exit_code == 1
     assert "install optional PySCF dependency" in captured.err
     assert not out_path.exists()
+
+
+def test_render_gaussian_generates_files(tmp_path, capsys):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "gaussian_inputs"
+
+    exit_code = main(
+        [
+            "render-gaussian",
+            str(project_path / "species.yaml"),
+            "--method",
+            "wb97xd",
+            "--basis",
+            "6-31+G(d,p)",
+            "--task",
+            "single_point",
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    water_input = (out_dir / "water.gjf").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert (out_dir / "carbon_dioxide.gjf").exists()
+    assert "# wb97xd/6-31+G(d,p)" in water_input
+    assert "\n0 1\n" in water_input
+    assert "water\t" in captured.out
+
+
+def test_render_gaussian_refuses_to_overwrite_without_force(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "gaussian_inputs"
+    out_dir.mkdir()
+    water_path = out_dir / "water.gjf"
+    water_path.write_text("sentinel\n", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "render-gaussian",
+            str(project_path / "species.yaml"),
+            "--method",
+            "wb97xd",
+            "--basis",
+            "6-31+G(d,p)",
+            "--task",
+            "single_point",
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 1
+    assert water_path.read_text(encoding="utf-8") == "sentinel\n"
+
+
+def test_render_gaussian_uses_task_solvent_and_extra_keywords(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "gaussian_inputs"
+
+    exit_code = main(
+        [
+            "render-gaussian",
+            str(project_path / "species.yaml"),
+            "--method",
+            "wb97xd",
+            "--basis",
+            "6-31+G(d,p)",
+            "--task",
+            "opt_freq",
+            "--solvent",
+            "smd,solvent=water",
+            "--route-keyword",
+            "scf=tight",
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    water_input = (out_dir / "water.gjf").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert (
+        "# wb97xd/6-31+G(d,p) opt freq scrf=(smd,solvent=water) scf=tight"
+        in water_input
+    )

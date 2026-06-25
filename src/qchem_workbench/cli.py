@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 from qchem_workbench import __version__
+from qchem_workbench.backends.gaussian_input import (
+    GAUSSIAN_TASK_PRESETS,
+    GaussianInputOptions,
+    gaussian_route_from_spec,
+    render_gaussian_input,
+)
 from qchem_workbench.backends.pyscf_backend import (
     MissingOptionalDependencyError,
     PySCFBackend,
@@ -64,6 +71,28 @@ def build_parser() -> argparse.ArgumentParser:
     run_pyscf_parser.add_argument("--basis", required=True)
     run_pyscf_parser.add_argument("--out", required=True, type=Path)
     run_pyscf_parser.set_defaults(func=_run_pyscf_command)
+
+    render_gaussian_parser = subparsers.add_parser(
+        "render-gaussian", help="render Gaussian input files without running Gaussian"
+    )
+    render_gaussian_parser.add_argument("registry", type=Path)
+    render_gaussian_parser.add_argument("--method", required=True)
+    render_gaussian_parser.add_argument("--basis", required=True)
+    render_gaussian_parser.add_argument(
+        "--task", required=True, choices=tuple(GAUSSIAN_TASK_PRESETS)
+    )
+    render_gaussian_parser.add_argument("--solvent")
+    render_gaussian_parser.add_argument(
+        "--route-keyword",
+        action="append",
+        default=[],
+        help="additional explicit Gaussian route keyword; may be repeated",
+    )
+    render_gaussian_parser.add_argument("--out", required=True, type=Path)
+    render_gaussian_parser.add_argument(
+        "--force", action="store_true", help="overwrite existing .gjf files"
+    )
+    render_gaussian_parser.set_defaults(func=_render_gaussian_command)
     return parser
 
 
@@ -128,6 +157,33 @@ def _run_pyscf_command(args: argparse.Namespace) -> int:
     _write_result_collection(args.out, spec, results)
     _print_result_summary(results)
     return 0 if all(result.success for result in results) else 1
+
+
+def _render_gaussian_command(args: argparse.Namespace) -> int:
+    try:
+        species_list = load_species_registry(args.registry)
+        spec = CalculationSpec(
+            backend="gaussian",
+            method=args.method,
+            basis=args.basis,
+            task=args.task,
+            solvent=args.solvent,
+        )
+        generated = _render_gaussian_files(
+            species_list=species_list,
+            spec=spec,
+            out_dir=args.out,
+            additional_keywords=tuple(args.route_keyword),
+            force=args.force,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("species\tfile")
+    for species_name, path in generated:
+        print(f"{species_name}\t{path}")
+    return 0
 
 
 def _initialize_project(path: Path, template: str, force: bool) -> None:
@@ -197,3 +253,42 @@ def _exception_result(
         metadata={"exception_type": type(exc).__name__},
         source_path=species.geometry_path,
     )
+
+
+def _render_gaussian_files(
+    species_list: list[Species],
+    spec: CalculationSpec,
+    out_dir: Path,
+    additional_keywords: tuple[str, ...],
+    force: bool,
+) -> list[tuple[str, Path]]:
+    output_dir = Path(out_dir)
+    route = gaussian_route_from_spec(spec, additional_keywords=additional_keywords)
+    targets = [
+        (species, output_dir / f"{_safe_filename(species.name)}.gjf")
+        for species in species_list
+    ]
+    conflicts = [path for _, path in targets if path.exists()]
+    if conflicts and not force:
+        conflict_list = ", ".join(str(path) for path in conflicts)
+        raise ValueError(f"refusing to overwrite existing file(s): {conflict_list}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    generated: list[tuple[str, Path]] = []
+    for species, path in targets:
+        content = render_gaussian_input(
+            species,
+            spec,
+            GaussianInputOptions(
+                route=route,
+                title=f"{species.name} {spec.task} Gaussian input",
+            ),
+        )
+        path.write_text(content, encoding="utf-8")
+        generated.append((species.name, path))
+    return generated
+
+
+def _safe_filename(value: str) -> str:
+    filename = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip()).strip("._")
+    return filename or "species"
