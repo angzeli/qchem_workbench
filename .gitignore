@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local tooling
+.DS_Store
+.idea/
+.vscode/
+
+# Local data and generated workflow outputs
+data/
+local_data/
+outputs/
+results/
+reports/
+
+# Quantum-chemistry calculation outputs and scratch files
+*.log
+*.out
+*.chk
+*.fchk
+*.rwf
+*.wfn
+*.wfx
+*.cube
+*.gbw
+*.molden
+*.scratch/
+scratch/
