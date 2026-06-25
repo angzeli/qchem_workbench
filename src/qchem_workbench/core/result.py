@@ -13,9 +13,9 @@ class CalculationResult:
 
     species_name: str
     backend: str
-    method: str
+    method: str | None
     basis: str | None
-    task: str
+    task: str | None
     success: bool
     electronic_energy_hartree: float | None = None
     gibbs_free_energy_hartree: float | None = None
