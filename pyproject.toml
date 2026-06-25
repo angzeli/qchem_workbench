@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+]
 pyscf = [
   "pyscf>=2",
 ]
