@@ -11,6 +11,10 @@ from pathlib import Path
 
 from qchem_workbench import __version__
 from qchem_workbench.analysis.quality_checks import QualityCheck, run_quality_checks
+from qchem_workbench.analysis.reactions import ReactionEnergyRow
+from qchem_workbench.analysis.reactions import load_pathway
+from qchem_workbench.analysis.reactions import reaction_electronic_energy_table
+from qchem_workbench.analysis.reactions import reaction_gibbs_free_energy_table
 from qchem_workbench.analysis.result_matching import match_results_to_species
 from qchem_workbench.backends.gaussian_input import (
     GAUSSIAN_TASK_PRESETS,
@@ -126,6 +130,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="emit machine-readable JSON"
     )
     check_results_parser.set_defaults(func=_check_results_command)
+
+    reaction_table_parser = subparsers.add_parser(
+        "reaction-table", help="compute generic reaction energy tables"
+    )
+    reaction_table_parser.add_argument("pathway", type=Path)
+    reaction_table_parser.add_argument("results", type=Path)
+    reaction_table_parser.add_argument(
+        "--quantity", required=True, choices=("electronic", "gibbs")
+    )
+    reaction_table_parser.add_argument("--out", required=True, type=Path)
+    reaction_table_parser.set_defaults(func=_reaction_table_command)
     return parser
 
 
@@ -257,6 +272,26 @@ def _check_results_command(args: argparse.Namespace) -> int:
     else:
         _print_quality_check_summary(checks)
     return 1 if any(check.severity == "error" for check in checks) else 0
+
+
+def _reaction_table_command(args: argparse.Namespace) -> int:
+    try:
+        pathway = load_pathway(args.pathway)
+        results = load_result_collection(args.results)
+        rows = _reaction_energy_rows(pathway, results, args.quantity)
+        _write_reaction_table_csv(args.out, rows)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("reaction_id\tquantity\tcomplete\tdelta_hartree\tmissing_species")
+    for row in rows:
+        delta_hartree = "" if row.delta_hartree is None else f"{row.delta_hartree:.12g}"
+        print(
+            f"{row.reaction_id}\t{row.quantity}\t{row.complete}\t"
+            f"{delta_hartree}\t{';'.join(row.missing_species)}"
+        )
+    return 0
 
 
 def _initialize_project(path: Path, template: str, force: bool) -> None:
@@ -590,3 +625,45 @@ def _print_quality_check_summary(checks: list[QualityCheck]) -> None:
         print(f"{severity.upper()} ({len(severity_checks)})")
         for check in severity_checks:
             print(f"- {check.code}: {check.result_identifier}: {check.message}")
+
+
+def _reaction_energy_rows(pathway, results, quantity: str) -> list[ReactionEnergyRow]:
+    if quantity == "electronic":
+        return reaction_electronic_energy_table(pathway, results)
+    if quantity == "gibbs":
+        return reaction_gibbs_free_energy_table(pathway, results)
+    raise ValueError(f"unsupported reaction quantity {quantity!r}")
+
+
+def _write_reaction_table_csv(path: Path, rows: list[ReactionEnergyRow]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "reaction_id",
+                "label",
+                "quantity",
+                "complete",
+                "delta_hartree",
+                "delta_ev",
+                "delta_kj_mol",
+                "missing_species",
+                "notes",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "reaction_id": row.reaction_id,
+                    "label": row.label,
+                    "quantity": row.quantity,
+                    "complete": row.complete,
+                    "delta_hartree": row.delta_hartree,
+                    "delta_ev": row.delta_ev,
+                    "delta_kj_mol": row.delta_kj_mol,
+                    "missing_species": ";".join(row.missing_species),
+                    "notes": row.notes,
+                }
+            )

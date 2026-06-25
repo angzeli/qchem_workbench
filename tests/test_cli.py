@@ -634,3 +634,160 @@ def test_check_results_uses_species_registry(tmp_path, capsys):
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "unmatched_species" in captured.out
+
+
+def test_reaction_table_electronic_mode(tmp_path, capsys):
+    pathway_path = tmp_path / "pathway.yaml"
+    pathway_path.write_text(
+        "schema_version: 1\n"
+        "reactions:\n"
+        "  - id: r1\n"
+        "    label: A to B\n"
+        "    reactants: {A: 1}\n"
+        "    products: {B: 1}\n",
+        encoding="utf-8",
+    )
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="A",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-2.0,
+            ),
+            CalculationResult(
+                species_name="B",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-1.5,
+            ),
+        ],
+    )
+    out_path = tmp_path / "reaction_table.csv"
+
+    exit_code = main(
+        [
+            "reaction-table",
+            str(pathway_path),
+            str(results_path),
+            "--quantity",
+            "electronic",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert "delta_e_electronic" in captured.out
+    assert rows[0]["quantity"] == "delta_e_electronic"
+    assert float(rows[0]["delta_hartree"]) == 0.5
+
+
+def test_reaction_table_gibbs_mode(tmp_path):
+    pathway_path = tmp_path / "pathway.yaml"
+    pathway_path.write_text(
+        "schema_version: 1\n"
+        "reactions:\n"
+        "  - id: r1\n"
+        "    reactants: {A: 1}\n"
+        "    products: {B: 1}\n",
+        encoding="utf-8",
+    )
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="A",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="freq",
+                success=True,
+                gibbs_free_energy_hartree=-2.0,
+            ),
+            CalculationResult(
+                species_name="B",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="freq",
+                success=True,
+                gibbs_free_energy_hartree=-1.25,
+            ),
+        ],
+    )
+    out_path = tmp_path / "reaction_table.csv"
+
+    exit_code = main(
+        [
+            "reaction-table",
+            str(pathway_path),
+            str(results_path),
+            "--quantity",
+            "gibbs",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert rows[0]["quantity"] == "delta_g_gibbs"
+    assert float(rows[0]["delta_hartree"]) == 0.75
+
+
+def test_reaction_table_missing_data(tmp_path):
+    pathway_path = tmp_path / "pathway.yaml"
+    pathway_path.write_text(
+        "schema_version: 1\n"
+        "reactions:\n"
+        "  - id: r1\n"
+        "    reactants: {A: 1}\n"
+        "    products: {B: 1}\n",
+        encoding="utf-8",
+    )
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="A",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-2.0,
+            )
+        ],
+    )
+    out_path = tmp_path / "reaction_table.csv"
+
+    exit_code = main(
+        [
+            "reaction-table",
+            str(pathway_path),
+            str(results_path),
+            "--quantity",
+            "electronic",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert rows[0]["complete"] == "False"
+    assert rows[0]["missing_species"] == "B"
+    assert rows[0]["delta_hartree"] == ""
