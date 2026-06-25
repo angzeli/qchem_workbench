@@ -8,6 +8,7 @@ from qchem_workbench.backends.pyscf_backend import MissingOptionalDependencyErro
 from qchem_workbench.cli import main
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.registry import load_species_registry
+from qchem_workbench.results.store import save_result_collection
 
 
 def test_cli_help(capsys):
@@ -501,3 +502,135 @@ def test_parse_gaussian_continues_on_parser_exception(tmp_path, monkeypatch):
     assert any(
         "synthetic parser failure" in result["warnings"][0] for result in failed
     )
+
+
+def test_check_results_clean_result_set(tmp_path, capsys):
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-76.0,
+            )
+        ],
+    )
+
+    exit_code = main(["check-results", str(results_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "No quality checks reported." in captured.out
+
+
+def test_check_results_reports_warnings(tmp_path, capsys):
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=None,
+            )
+        ],
+    )
+
+    exit_code = main(["check-results", str(results_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "WARNING" in captured.out
+    assert "missing_electronic_energy" in captured.out
+
+
+def test_check_results_errors_exit_nonzero(tmp_path, capsys):
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=False,
+                electronic_energy_hartree=-76.0,
+            )
+        ],
+    )
+
+    exit_code = main(["check-results", str(results_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "ERROR" in captured.out
+    assert "unsuccessful_calculation" in captured.out
+
+
+def test_check_results_json_output(tmp_path, capsys):
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=None,
+            )
+        ],
+    )
+
+    exit_code = main(["check-results", str(results_path), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["summary"]["warning"] == 1
+    assert payload["checks"][0]["code"] == "missing_electronic_energy"
+
+
+def test_check_results_uses_species_registry(tmp_path, capsys):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-76.0,
+            )
+        ],
+    )
+
+    exit_code = main(
+        [
+            "check-results",
+            str(results_path),
+            "--species",
+            str(project_path / "species.yaml"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "unmatched_species" in captured.out

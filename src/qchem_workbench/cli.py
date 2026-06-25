@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 
 from qchem_workbench import __version__
+from qchem_workbench.analysis.quality_checks import QualityCheck, run_quality_checks
+from qchem_workbench.analysis.result_matching import match_results_to_species
 from qchem_workbench.backends.gaussian_input import (
     GAUSSIAN_TASK_PRESETS,
     GaussianInputOptions,
@@ -25,6 +27,7 @@ from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.registry import load_species_registry
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
+from qchem_workbench.results.store import load_result_collection
 from qchem_workbench.templates.project import (
     PROJECT_DIRECTORIES,
     TEMPLATE_NAMES,
@@ -113,6 +116,16 @@ def build_parser() -> argparse.ArgumentParser:
     parse_gaussian_parser.add_argument("--out", required=True, type=Path)
     parse_gaussian_parser.add_argument("--csv", type=Path)
     parse_gaussian_parser.set_defaults(func=_parse_gaussian_command)
+
+    check_results_parser = subparsers.add_parser(
+        "check-results", help="run quality checks on a result collection"
+    )
+    check_results_parser.add_argument("results", type=Path)
+    check_results_parser.add_argument("--species", type=Path)
+    check_results_parser.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON"
+    )
+    check_results_parser.set_defaults(func=_check_results_command)
     return parser
 
 
@@ -229,6 +242,21 @@ def _parse_gaussian_command(args: argparse.Namespace) -> int:
         )
         print(f"{source_path}\t{result.success}\t{energy}\t{len(result.warnings)}")
     return 0
+
+
+def _check_results_command(args: argparse.Namespace) -> int:
+    try:
+        results = load_result_collection(args.results)
+        checks = _quality_checks_for_results(results, args.species)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(_quality_check_payload(checks), indent=2, sort_keys=True))
+    else:
+        _print_quality_check_summary(checks)
+    return 1 if any(check.severity == "error" for check in checks) else 0
 
 
 def _initialize_project(path: Path, template: str, force: bool) -> None:
@@ -480,3 +508,85 @@ def _write_parsed_result_csv(path: Path, results: list[CalculationResult]) -> No
                     "warning_count": len(result.warnings),
                 }
             )
+
+
+def _quality_checks_for_results(
+    results: list[CalculationResult],
+    species_path: Path | None,
+) -> list[QualityCheck]:
+    expected_multiplicities: dict[str, int] = {}
+    checks: list[QualityCheck] = []
+    if species_path is not None:
+        species_list = load_species_registry(species_path)
+        match_report = match_results_to_species(species_list, results)
+        expected_multiplicities = {
+            match.result.species_name: match.species.multiplicity
+            for match in match_report.matches
+        }
+        checks.extend(_quality_checks_from_match_report(match_report))
+
+    checks.extend(run_quality_checks(results, expected_multiplicities))
+    return checks
+
+
+def _quality_checks_from_match_report(match_report) -> list[QualityCheck]:
+    checks: list[QualityCheck] = []
+    for species_name in match_report.unmatched_species:
+        checks.append(
+            QualityCheck(
+                code="unmatched_species",
+                severity="warning",
+                message=f"No result matched registry species {species_name!r}.",
+                result_identifier=species_name,
+            )
+        )
+    for result in match_report.unmatched_results:
+        checks.append(
+            QualityCheck(
+                code="unmatched_result",
+                severity="info",
+                message=f"No registry species matched result {result.species_name!r}.",
+                result_identifier=result.species_name,
+            )
+        )
+    for ambiguous in match_report.ambiguous_matches:
+        checks.append(
+            QualityCheck(
+                code="ambiguous_result_match",
+                severity="warning",
+                message=(
+                    f"Registry species {ambiguous.species_name!r} matched multiple "
+                    "results and needs human review."
+                ),
+                result_identifier=ambiguous.species_name,
+            )
+        )
+    return checks
+
+
+def _quality_check_payload(checks: list[QualityCheck]) -> dict[str, object]:
+    return {
+        "summary": _quality_check_counts(checks),
+        "checks": [check.to_dict() for check in checks],
+    }
+
+
+def _quality_check_counts(checks: list[QualityCheck]) -> dict[str, int]:
+    return {
+        severity: sum(1 for check in checks if check.severity == severity)
+        for severity in ("error", "warning", "info")
+    }
+
+
+def _print_quality_check_summary(checks: list[QualityCheck]) -> None:
+    if not checks:
+        print("No quality checks reported.")
+        return
+
+    for severity in ("error", "warning", "info"):
+        severity_checks = [check for check in checks if check.severity == severity]
+        if not severity_checks:
+            continue
+        print(f"{severity.upper()} ({len(severity_checks)})")
+        for check in severity_checks:
+            print(f"- {check.code}: {check.result_identifier}: {check.message}")
