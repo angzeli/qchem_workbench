@@ -12,6 +12,7 @@ _SCF_DONE_RE = re.compile(
     r"SCF Done:\s+E\([^)]+\)\s+=\s+([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
 )
 _ROUTE_START_RE = re.compile(r"^\s*#")
+_FREQUENCIES_RE = re.compile(r"Frequencies\s+--\s+(.+)")
 _THERMOCHEMISTRY_PATTERNS = {
     "zero_point_correction_hartree": re.compile(
         r"Zero-point correction=\s+([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
@@ -78,10 +79,22 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
         warnings.append("SCF electronic energy was not found.")
 
     thermochemistry = _extract_thermochemistry(text, warnings)
+    frequencies = _extract_frequencies(text, warnings)
+    negative_frequencies = [value for value in frequencies if value < 0.0]
+    if negative_frequencies:
+        warnings.append(
+            "Negative frequencies found; parser reports values without assigning "
+            "transition-state identity."
+        )
 
     metadata = {
         "normal_termination": normal_termination,
         "error_termination": error_termination,
+        "frequencies_cm1": frequencies,
+        "negative_frequency_count": len(negative_frequencies),
+        "most_negative_frequency_cm1": (
+            min(negative_frequencies) if negative_frequencies else None
+        ),
     }
     if route is not None:
         metadata["route"] = route
@@ -188,3 +201,25 @@ def _thermochemistry_sections(text: str) -> list[dict[str, float | None]]:
     if current:
         sections.append(current)
     return sections
+
+
+def _extract_frequencies(text: str, warnings: list[str]) -> list[float]:
+    frequencies: list[float] = []
+    malformed_lines = 0
+
+    for line in text.splitlines():
+        match = _FREQUENCIES_RE.search(line)
+        if not match:
+            continue
+
+        for token in match.group(1).split():
+            try:
+                frequencies.append(_parse_float(token))
+            except ValueError:
+                malformed_lines += 1
+
+    if malformed_lines:
+        warnings.append(
+            "Malformed Gaussian frequency token(s) were ignored during parsing."
+        )
+    return frequencies

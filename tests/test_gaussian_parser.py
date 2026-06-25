@@ -163,3 +163,66 @@ def test_parse_uses_last_complete_thermochemistry_section(tmp_path):
         "Multiple complete thermochemistry" in warning
         for warning in result.warnings
     )
+
+
+def test_parse_no_imaginary_frequency(tmp_path):
+    output_path = tmp_path / "real-frequencies.log"
+    output_path.write_text(
+        " # wb97xd/6-31g freq\n"
+        " Frequencies --   100.0   250.5   3400.2\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.metadata["frequencies_cm1"] == [100.0, 250.5, 3400.2]
+    assert result.metadata["negative_frequency_count"] == 0
+    assert result.metadata["most_negative_frequency_cm1"] is None
+
+
+def test_parse_one_imaginary_frequency(tmp_path):
+    output_path = tmp_path / "one-imaginary.log"
+    output_path.write_text(
+        " # wb97xd/6-31g freq\n"
+        " Frequencies --   -125.4   250.5   3400.2\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.metadata["negative_frequency_count"] == 1
+    assert result.metadata["most_negative_frequency_cm1"] == -125.4
+    assert any("Negative frequencies found" in warning for warning in result.warnings)
+
+
+def test_parse_multiple_imaginary_frequencies(tmp_path):
+    output_path = tmp_path / "multi-imaginary.log"
+    output_path.write_text(
+        " # wb97xd/6-31g freq\n"
+        " Frequencies --   -25.0   -150.5   100.0\n"
+        " Frequencies --   -300.2   250.5   3400.2\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.metadata["negative_frequency_count"] == 3
+    assert result.metadata["most_negative_frequency_cm1"] == -300.2
+
+
+def test_parse_malformed_frequency_line(tmp_path):
+    output_path = tmp_path / "malformed-frequency.log"
+    output_path.write_text(
+        " # wb97xd/6-31g freq\n"
+        " Frequencies --   bad-token   250.5\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.metadata["frequencies_cm1"] == [250.5]
+    assert any("Malformed Gaussian frequency" in warning for warning in result.warnings)
