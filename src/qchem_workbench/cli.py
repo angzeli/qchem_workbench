@@ -38,6 +38,10 @@ from qchem_workbench.core.species import Species
 from qchem_workbench.projects.manifest import ProjectManifest, load_project_manifest
 from qchem_workbench.reports.markdown import write_markdown_report
 from qchem_workbench.reports.plotting import plot_pathway_from_csv
+from qchem_workbench.reports.triage import (
+    classify_triage_results,
+    write_failed_jobs_report,
+)
 from qchem_workbench.results.store import load_result_collection
 from qchem_workbench.templates.project import (
     PROJECT_DIRECTORIES,
@@ -175,6 +179,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_project_parser.add_argument("manifest", type=Path)
     run_project_parser.set_defaults(func=_run_project_command)
+
+    triage_parser = subparsers.add_parser(
+        "triage", help="generate a failed-job triage Markdown report"
+    )
+    triage_parser.add_argument("results", type=Path)
+    triage_parser.add_argument("--out", required=True, type=Path)
+    triage_parser.set_defaults(func=_triage_command)
     return parser
 
 
@@ -396,6 +407,22 @@ def _run_project_command(args: argparse.Namespace) -> int:
         return 1
 
     return 1 if calculation_failed else 0
+
+
+def _triage_command(args: argparse.Namespace) -> int:
+    try:
+        results = load_result_collection(args.results)
+        write_failed_jobs_report(args.out, results)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    classified = classify_triage_results(results)
+    print("category\tcount")
+    for category, rows in classified.items():
+        print(f"{category}\t{len(rows)}")
+    print(f"Wrote failed-job triage report to {args.out}.")
+    return 0
 
 
 def _initialize_project(path: Path, template: str, force: bool) -> None:

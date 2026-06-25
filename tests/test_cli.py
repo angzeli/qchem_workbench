@@ -1022,3 +1022,31 @@ def test_run_project_parses_gaussian_fixture_and_generates_report(
     assert payload["results"][0]["species_name"] == "water"
     assert payload["results"][0]["electronic_energy_hartree"] == -76.1
     assert "unmatched_species" in report
+
+
+def test_triage_command_writes_failed_jobs_markdown(tmp_path, capsys):
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="missing-energy",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                warnings=["SCF electronic energy was not parsed."],
+            )
+        ],
+    )
+    out_path = tmp_path / "failed_jobs.md"
+
+    exit_code = main(["triage", str(results_path), "--out", str(out_path)])
+
+    captured = capsys.readouterr()
+    report = out_path.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "missing_energy" in captured.out
+    assert "# Failed job triage" in report
+    assert "missing-energy" in report
