@@ -61,9 +61,11 @@ class ProjectManifest:
     species_path: Path
     results_path: Path | None = None
     report_path: Path | None = None
+    reaction_table_path: Path | None = None
     inputs_dir: Path | None = None
     outputs_dir: Path | None = None
     pathway_paths: tuple[Path, ...] = ()
+    reaction_quantity: str | None = None
     backend_mode: str | None = None
     calculation: ProjectCalculationSettings = field(
         default_factory=ProjectCalculationSettings
@@ -104,9 +106,11 @@ def load_project_manifest(path: Path) -> ProjectManifest:
         species_path=species_path,
         results_path=_optional_path(manifest_path, project, "results"),
         report_path=_optional_path(manifest_path, project, "reports"),
+        reaction_table_path=_optional_path(manifest_path, project, "reaction_table"),
         inputs_dir=_optional_path(manifest_path, project, "inputs"),
         outputs_dir=_optional_path(manifest_path, project, "outputs"),
         pathway_paths=pathway_paths,
+        reaction_quantity=_optional_string(project, "reaction_quantity"),
         backend_mode=_optional_string(project, "backend_mode"),
         calculation=_calculation_settings(manifest_path, project.get("calculation", {})),
         steps=_string_tuple(manifest_path, project.get("steps", []), "steps"),
@@ -183,10 +187,10 @@ def _calculation_settings(
         value = {}
     if not isinstance(value, dict):
         raise ValueError(f"{manifest_path}: project.calculation must be a mapping")
-    route_keywords = value.get("route_keywords", ())
+    route_keywords = value.get("route_keywords", [])
     if route_keywords in (None, ""):
-        route_keywords = ()
-    if not isinstance(route_keywords, list):
+        route_keywords = []
+    if not isinstance(route_keywords, (list, tuple)):
         raise ValueError(
             f"{manifest_path}: project.calculation.route_keywords must be a list"
         )

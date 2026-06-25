@@ -18,6 +18,8 @@ def test_load_valid_project_manifest(tmp_path):
         "  species: species.yaml\n"
         "  results: results/results.json\n"
         "  reports: reports/report.md\n"
+        "  reaction_table: results/reaction_table.csv\n"
+        "  reaction_quantity: electronic\n"
         "  inputs: gaussian_inputs\n"
         "  outputs: outputs\n"
         "  pathways:\n"
@@ -41,6 +43,8 @@ def test_load_valid_project_manifest(tmp_path):
     assert manifest.species_path == species_path
     assert manifest.results_path == tmp_path / "results" / "results.json"
     assert manifest.report_path == tmp_path / "reports" / "report.md"
+    assert manifest.reaction_table_path == tmp_path / "results" / "reaction_table.csv"
+    assert manifest.reaction_quantity == "electronic"
     assert manifest.inputs_dir == tmp_path / "gaussian_inputs"
     assert manifest.outputs_dir == tmp_path / "outputs"
     assert manifest.pathway_paths == (pathway_path,)

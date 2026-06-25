@@ -850,3 +850,121 @@ def test_plot_pathway_command_writes_png(tmp_path, monkeypatch, capsys):
     assert exit_code == 0
     assert "Wrote pathway plot" in captured.out
     assert out_path.read_bytes().startswith(b"\x89PNG")
+
+
+def test_run_project_renders_gaussian_inputs(tmp_path, capsys):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    manifest_path = project_path / "qchem_project.yaml"
+    manifest_path.write_text(
+        "schema_version: 1\n"
+        "project:\n"
+        "  name: demo\n"
+        "  species: species.yaml\n"
+        "  inputs: gaussian_inputs\n"
+        "  backend_mode: gaussian\n"
+        "  calculation:\n"
+        "    method: wb97xd\n"
+        "    basis: 6-31g\n"
+        "    task: single_point\n"
+        "  steps: [render_gaussian]\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["run-project", str(manifest_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "STEP render_gaussian" in captured.out
+    assert (project_path / "gaussian_inputs" / "water.gjf").exists()
+
+
+def test_run_project_runs_mocked_pyscf_and_report(
+    tmp_path, monkeypatch, capsys
+):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    manifest_path = project_path / "qchem_project.yaml"
+    manifest_path.write_text(
+        "schema_version: 1\n"
+        "project:\n"
+        "  name: demo\n"
+        "  species: species.yaml\n"
+        "  results: results/results.json\n"
+        "  reports: reports/report.md\n"
+        "  backend_mode: pyscf\n"
+        "  calculation:\n"
+        "    method: b3lyp\n"
+        "    basis: sto-3g\n"
+        "    task: single_point\n"
+        "  steps: [run_pyscf, quality_checks, report]\n",
+        encoding="utf-8",
+    )
+
+    class FakeBackend:
+        def run(self, species, spec):
+            return CalculationResult(
+                species_name=species.name,
+                backend="pyscf",
+                method=spec.method,
+                basis=spec.basis,
+                task=spec.task,
+                success=True,
+                electronic_energy_hartree=-1.0,
+            )
+
+    monkeypatch.setattr("qchem_workbench.cli.PySCFBackend", FakeBackend)
+
+    exit_code = main(["run-project", str(manifest_path)])
+
+    captured = capsys.readouterr()
+    payload = json.loads(
+        (project_path / "results" / "results.json").read_text(encoding="utf-8")
+    )
+    report = (project_path / "reports" / "report.md").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "STEP run_pyscf" in captured.out
+    assert "STEP report" in captured.out
+    assert len(payload["results"]) == 3
+    assert "# qchem-workbench report" in report
+
+
+def test_run_project_parses_gaussian_fixture_and_generates_report(
+    tmp_path, capsys
+):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    outputs = project_path / "outputs"
+    (outputs / "water.log").write_text(
+        " # wb97xd/6-31g\n"
+        " SCF Done:  E(RB3LYP) =  -76.1000000000     A.U. after 10 cycles\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+    manifest_path = project_path / "qchem_project.yaml"
+    manifest_path.write_text(
+        "schema_version: 1\n"
+        "project:\n"
+        "  name: demo\n"
+        "  species: species.yaml\n"
+        "  outputs: outputs\n"
+        "  results: results/gaussian_results.json\n"
+        "  reports: reports/report.md\n"
+        "  steps: [parse_gaussian, quality_checks, report]\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["run-project", str(manifest_path)])
+
+    captured = capsys.readouterr()
+    payload = json.loads(
+        (project_path / "results" / "gaussian_results.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    report = (project_path / "reports" / "report.md").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "STEP parse_gaussian" in captured.out
+    assert payload["results"][0]["species_name"] == "water"
+    assert payload["results"][0]["electronic_energy_hartree"] == -76.1
+    assert "unmatched_species" in report

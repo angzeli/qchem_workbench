@@ -31,6 +31,7 @@ from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.registry import load_species_registry
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
+from qchem_workbench.projects.manifest import ProjectManifest, load_project_manifest
 from qchem_workbench.reports.markdown import write_markdown_report
 from qchem_workbench.reports.plotting import plot_pathway_from_csv
 from qchem_workbench.results.store import load_result_collection
@@ -159,6 +160,12 @@ def build_parser() -> argparse.ArgumentParser:
     plot_pathway_parser.add_argument("--out", required=True, type=Path)
     plot_pathway_parser.add_argument("--title")
     plot_pathway_parser.set_defaults(func=_plot_pathway_command)
+
+    run_project_parser = subparsers.add_parser(
+        "run-project", help="run explicitly configured project manifest steps"
+    )
+    run_project_parser.add_argument("manifest", type=Path)
+    run_project_parser.set_defaults(func=_run_project_command)
     return parser
 
 
@@ -344,6 +351,43 @@ def _plot_pathway_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_project_command(args: argparse.Namespace) -> int:
+    try:
+        manifest = load_project_manifest(args.manifest)
+        species_list = load_species_registry(manifest.species_path)
+        print(f"Loaded project {manifest.name!r} from {manifest.path}.")
+        print(f"Validated {len(species_list)} species in {manifest.species_path}.")
+        if not manifest.steps:
+            print("No project steps configured.")
+            return 0
+
+        reaction_rows: list[ReactionEnergyRow] = []
+        calculation_failed = False
+        for step in manifest.steps:
+            print(f"STEP {step}")
+            if step == "render_gaussian":
+                _run_project_render_gaussian(manifest, species_list)
+            elif step == "parse_gaussian":
+                _run_project_parse_gaussian(manifest)
+            elif step == "run_pyscf":
+                calculation_failed = (
+                    _run_project_pyscf(manifest, species_list) or calculation_failed
+                )
+            elif step == "quality_checks":
+                _run_project_quality_checks(manifest)
+            elif step == "reaction_table":
+                reaction_rows = _run_project_reaction_table(manifest, species_list)
+            elif step == "report":
+                _run_project_report(manifest, species_list, reaction_rows)
+            else:
+                raise ValueError(f"unsupported project step {step!r}")
+    except (OSError, ValueError, MissingOptionalDependencyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    return 1 if calculation_failed else 0
+
+
 def _initialize_project(path: Path, template: str, force: bool) -> None:
     target = Path(path)
     if target.exists() and not target.is_dir():
@@ -367,6 +411,139 @@ def _initialize_project(path: Path, template: str, force: bool) -> None:
         destination = target / relative_path
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(content, encoding="utf-8")
+
+
+def _run_project_render_gaussian(
+    manifest: ProjectManifest, species_list: list[Species]
+) -> None:
+    out_dir = _required_manifest_path(
+        manifest.inputs_dir, "project.inputs", "render_gaussian"
+    )
+    spec = _project_calculation_spec(manifest, "gaussian", "render_gaussian")
+    generated = _render_gaussian_files(
+        species_list=species_list,
+        spec=spec,
+        out_dir=out_dir,
+        additional_keywords=manifest.calculation.route_keywords,
+        force=False,
+    )
+    print(f"Rendered {len(generated)} Gaussian input file(s) into {out_dir}.")
+
+
+def _run_project_parse_gaussian(manifest: ProjectManifest) -> None:
+    outputs_dir = _required_manifest_path(
+        manifest.outputs_dir, "project.outputs", "parse_gaussian"
+    )
+    results_path = _required_manifest_path(
+        manifest.results_path, "project.results", "parse_gaussian"
+    )
+    paths = _gaussian_output_paths(outputs_dir)
+    results = _parse_gaussian_outputs(paths)
+    _write_parsed_result_collection(results_path, results)
+    print(f"Parsed {len(results)} Gaussian output file(s) into {results_path}.")
+
+
+def _run_project_pyscf(
+    manifest: ProjectManifest, species_list: list[Species]
+) -> bool:
+    results_path = _required_manifest_path(
+        manifest.results_path, "project.results", "run_pyscf"
+    )
+    spec = _project_calculation_spec(manifest, "pyscf", "run_pyscf")
+    backend = PySCFBackend()
+    results: list[CalculationResult] = []
+
+    for species in species_list:
+        try:
+            result = backend.run(species, spec)
+        except Exception as exc:
+            if isinstance(exc, MissingOptionalDependencyError):
+                raise
+            result = _exception_result(species, spec, exc)
+        results.append(result)
+
+    _write_result_collection(results_path, spec, results)
+    _print_result_summary(results)
+    return not all(result.success for result in results)
+
+
+def _run_project_quality_checks(manifest: ProjectManifest) -> None:
+    results_path = _required_manifest_path(
+        manifest.results_path, "project.results", "quality_checks"
+    )
+    results = load_result_collection(results_path)
+    checks = _quality_checks_for_results(results, manifest.species_path)
+    _print_quality_check_summary(checks)
+
+
+def _run_project_reaction_table(
+    manifest: ProjectManifest, species_list: list[Species]
+) -> list[ReactionEnergyRow]:
+    results_path = _required_manifest_path(
+        manifest.results_path, "project.results", "reaction_table"
+    )
+    reaction_table_path = _required_manifest_path(
+        manifest.reaction_table_path, "project.reaction_table", "reaction_table"
+    )
+    if manifest.reaction_quantity is None:
+        raise ValueError(
+            "reaction_table step requires project.reaction_quantity "
+            "('electronic' or 'gibbs')"
+        )
+    if len(manifest.pathway_paths) != 1:
+        raise ValueError(
+            "reaction_table step requires exactly one project.pathways entry"
+        )
+
+    pathway = load_pathway(manifest.pathway_paths[0], species_registry=species_list)
+    results = load_result_collection(results_path)
+    rows = _reaction_energy_rows(pathway, results, manifest.reaction_quantity)
+    _write_reaction_table_csv(reaction_table_path, rows)
+    print(f"Wrote {len(rows)} reaction row(s) to {reaction_table_path}.")
+    return rows
+
+
+def _run_project_report(
+    manifest: ProjectManifest,
+    species_list: list[Species],
+    reaction_rows: list[ReactionEnergyRow],
+) -> None:
+    results_path = _required_manifest_path(
+        manifest.results_path, "project.results", "report"
+    )
+    report_path = _required_manifest_path(
+        manifest.report_path, "project.reports", "report"
+    )
+    results = load_result_collection(results_path)
+    checks = _quality_checks_for_results(results, manifest.species_path)
+    write_markdown_report(
+        report_path,
+        results,
+        species=species_list,
+        quality_checks=checks,
+        reaction_rows=reaction_rows,
+    )
+    print(f"Wrote Markdown report to {report_path}.")
+
+
+def _project_calculation_spec(
+    manifest: ProjectManifest, expected_backend: str, step: str
+) -> CalculationSpec:
+    spec = manifest.calculation.to_spec(
+        default_backend=manifest.backend_mode or expected_backend
+    )
+    if spec.backend != expected_backend:
+        raise ValueError(
+            f"{step} step requires backend {expected_backend!r}; "
+            f"manifest configured {spec.backend!r}"
+        )
+    return spec
+
+
+def _required_manifest_path(path: Path | None, field: str, step: str) -> Path:
+    if path is None:
+        raise ValueError(f"{step} step requires {field}")
+    return path
 
 
 def _write_result_collection(
