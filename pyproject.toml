@@ -12,7 +12,9 @@ license = { text = "MIT" }
 authors = [
   { name = "qchem-workbench contributors" }
 ]
-dependencies = []
+dependencies = [
+  "PyYAML>=6",
+]
 
 [project.scripts]
 qchemwb = "qchem_workbench.cli:main"

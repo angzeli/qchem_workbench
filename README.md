@@ -25,3 +25,20 @@ Show CLI help with:
 ```bash
 qchemwb --help
 ```
+
+## Species Registry
+
+Species registries are YAML files with `schema_version: 1` and a `species`
+list. Geometry paths may be relative to the registry file.
+
+```yaml
+schema_version: 1
+species:
+  - name: water
+    formula: H2O
+    charge: 0
+    multiplicity: 1
+    geometry_path: xyz/water.xyz
+    tags: [demo]
+    notes: Example molecule
+```
