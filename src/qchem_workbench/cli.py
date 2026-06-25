@@ -92,6 +92,16 @@ def build_parser() -> argparse.ArgumentParser:
     render_gaussian_parser.add_argument(
         "--force", action="store_true", help="overwrite existing .gjf files"
     )
+    render_gaussian_parser.add_argument(
+        "--job-folders",
+        action="store_true",
+        help="create one folder per species and place input files inside it",
+    )
+    render_gaussian_parser.add_argument(
+        "--include-run-script",
+        action="store_true",
+        help="include a simple Gaussian run script template in each job folder",
+    )
     render_gaussian_parser.set_defaults(func=_render_gaussian_command)
     return parser
 
@@ -175,6 +185,8 @@ def _render_gaussian_command(args: argparse.Namespace) -> int:
             out_dir=args.out,
             additional_keywords=tuple(args.route_keyword),
             force=args.force,
+            job_folders=args.job_folders,
+            include_run_script=args.include_run_script,
         )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -261,30 +273,53 @@ def _render_gaussian_files(
     out_dir: Path,
     additional_keywords: tuple[str, ...],
     force: bool,
+    job_folders: bool = False,
+    include_run_script: bool = False,
 ) -> list[tuple[str, Path]]:
+    if include_run_script and not job_folders:
+        raise ValueError("--include-run-script requires --job-folders")
+
     output_dir = Path(out_dir)
     route = gaussian_route_from_spec(spec, additional_keywords=additional_keywords)
-    targets = [
-        (species, output_dir / f"{_safe_filename(species.name)}.gjf")
+    jobs = [
+        _gaussian_job_paths(output_dir, species.name, job_folders, include_run_script)
         for species in species_list
     ]
-    conflicts = [path for _, path in targets if path.exists()]
+    input_paths = [job["input_path"] for job in jobs]
+    if len(set(input_paths)) != len(input_paths):
+        raise ValueError("species names produce duplicate Gaussian input filenames")
+
+    conflict_paths = [
+        job[key]
+        for job in jobs
+        for key in ("input_path", "run_script_path")
+        if job[key] is not None
+    ]
+    conflicts = [path for path in conflict_paths if path.exists()]
     if conflicts and not force:
         conflict_list = ", ".join(str(path) for path in conflicts)
         raise ValueError(f"refusing to overwrite existing file(s): {conflict_list}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     generated: list[tuple[str, Path]] = []
-    for species, path in targets:
+    for species, job in zip(species_list, jobs):
+        path = job["input_path"]
+        checkpoint = job["checkpoint"]
         content = render_gaussian_input(
             species,
             spec,
             GaussianInputOptions(
+                checkpoint=checkpoint,
                 route=route,
                 title=f"{species.name} {spec.task} Gaussian input",
             ),
         )
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+        if job["run_script_path"] is not None:
+            job["run_script_path"].write_text(
+                _gaussian_run_script(path.name), encoding="utf-8"
+            )
         generated.append((species.name, path))
     return generated
 
@@ -292,3 +327,37 @@ def _render_gaussian_files(
 def _safe_filename(value: str) -> str:
     filename = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip()).strip("._")
     return filename or "species"
+
+
+def _gaussian_job_paths(
+    output_dir: Path,
+    species_name: str,
+    job_folders: bool,
+    include_run_script: bool,
+) -> dict[str, Path | str | None]:
+    safe_name = _safe_filename(species_name)
+    if job_folders:
+        job_dir = output_dir / safe_name
+        return {
+            "input_path": job_dir / f"{safe_name}.gjf",
+            "checkpoint": f"{safe_name}.chk",
+            "run_script_path": job_dir / "run_gaussian.sh"
+            if include_run_script
+            else None,
+        }
+    return {
+        "input_path": output_dir / f"{safe_name}.gjf",
+        "checkpoint": None,
+        "run_script_path": None,
+    }
+
+
+def _gaussian_run_script(input_filename: str) -> str:
+    output_filename = f"{Path(input_filename).stem}.log"
+    return (
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "\n"
+        'GAUSSIAN_CMD="${GAUSSIAN_CMD:-g16}"\n'
+        f'"$GAUSSIAN_CMD" < "{input_filename}" > "{output_filename}"\n'
+    )

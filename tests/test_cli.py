@@ -306,3 +306,106 @@ def test_render_gaussian_uses_task_solvent_and_extra_keywords(tmp_path):
         "# wb97xd/6-31+G(d,p) opt freq scrf=(smd,solvent=water) scf=tight"
         in water_input
     )
+
+
+def test_render_gaussian_flat_layout_remains_default(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "gaussian_inputs"
+
+    exit_code = main(
+        [
+            "render-gaussian",
+            str(project_path / "species.yaml"),
+            "--method",
+            "wb97xd",
+            "--basis",
+            "6-31+G(d,p)",
+            "--task",
+            "single_point",
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    assert (out_dir / "water.gjf").exists()
+    assert not (out_dir / "water" / "water.gjf").exists()
+
+
+def test_render_gaussian_job_folder_layout(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "gaussian_inputs"
+
+    exit_code = main(
+        [
+            "render-gaussian",
+            str(project_path / "species.yaml"),
+            "--method",
+            "wb97xd",
+            "--basis",
+            "6-31+G(d,p)",
+            "--task",
+            "single_point",
+            "--out",
+            str(out_dir),
+            "--job-folders",
+        ]
+    )
+
+    water_input = (out_dir / "water" / "water.gjf").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "%chk=water.chk\n" in water_input
+    assert (out_dir / "carbon_dioxide" / "carbon_dioxide.gjf").exists()
+
+
+def test_render_gaussian_run_script_generation(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "gaussian_inputs"
+
+    exit_code = main(
+        [
+            "render-gaussian",
+            str(project_path / "species.yaml"),
+            "--method",
+            "wb97xd",
+            "--basis",
+            "6-31+G(d,p)",
+            "--task",
+            "single_point",
+            "--out",
+            str(out_dir),
+            "--job-folders",
+            "--include-run-script",
+        ]
+    )
+
+    script = (out_dir / "water" / "run_gaussian.sh").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert 'GAUSSIAN_CMD="${GAUSSIAN_CMD:-g16}"' in script
+    assert '"$GAUSSIAN_CMD" < "water.gjf" > "water.log"' in script
+
+
+def test_render_gaussian_run_script_requires_job_folders(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+
+    exit_code = main(
+        [
+            "render-gaussian",
+            str(project_path / "species.yaml"),
+            "--method",
+            "wb97xd",
+            "--basis",
+            "6-31+G(d,p)",
+            "--task",
+            "single_point",
+            "--out",
+            str(project_path / "gaussian_inputs"),
+            "--include-run-script",
+        ]
+    )
+
+    assert exit_code == 1
