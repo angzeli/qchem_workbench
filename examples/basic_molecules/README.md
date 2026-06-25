@@ -1,8 +1,8 @@
 # Basic Molecules Example
 
 This example is a small qchem-workbench workflow for simple molecules. It is
-intended for fast command-line testing and tutorial use, not for production
-chemistry.
+intended for fast command-line testing and tutorial use, not as a benchmark or
+production chemistry setup.
 
 The Gaussian-like output files in `outputs/` are synthetic parser fixtures.
 Their energies and text are not scientific data.
@@ -42,4 +42,3 @@ qchemwb report /tmp/qchemwb-basic-results.json --species examples/basic_molecule
 ```
 
 See `report_example.md` for a compact example of the expected report shape.
-

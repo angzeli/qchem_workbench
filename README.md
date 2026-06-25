@@ -7,10 +7,11 @@ workflows. It helps manage species registries, input files, calculation outputs,
 parsed result collections, quality checks, reaction-energy tables, plots, and
 Markdown reports across supported backends.
 
-qchem-workbench is not a quantum-chemistry engine. It does not implement DFT,
-wavefunction methods, molecular dynamics, thermochemistry corrections, or
-electrochemical corrections from scratch. It does not replace Gaussian, PySCF,
-ORCA, Quantum ESPRESSO, VASP, or any other electronic-structure code.
+qchem-workbench is not a quantum-chemistry engine. It does not implement or
+compute DFT, wavefunction methods, molecular dynamics, thermochemistry
+corrections, or electrochemical corrections from scratch. It does not replace
+Gaussian, PySCF, ORCA, Quantum ESPRESSO, VASP, or any other
+electronic-structure code.
 
 The current workflow support focuses on:
 
@@ -270,7 +271,7 @@ Only listed steps run. The command does not execute Gaussian.
 
 ## Examples
 
-CO2RR molecular workflow example:
+CO2RR molecular bookkeeping example:
 
 - `examples/co2rr_molecular/`
 - `examples/pathways/co2rr/co_pathway.yaml`

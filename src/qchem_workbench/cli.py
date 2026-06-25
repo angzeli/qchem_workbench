@@ -151,7 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     check_results_parser.set_defaults(func=_check_results_command)
 
     reaction_table_parser = subparsers.add_parser(
-        "reaction-table", help="compute generic reaction energy tables"
+        "reaction-table", help="compute generic reaction dE/dG tables"
     )
     reaction_table_parser.add_argument("pathway", type=Path)
     reaction_table_parser.add_argument("results", type=Path)
