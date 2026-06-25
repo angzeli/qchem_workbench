@@ -1,0 +1,3 @@
+reaction_id,label,quantity,complete,delta_hartree,delta_ev,delta_kj_mol,missing_species,notes
+co2_to_co_bookkeeping,Illustrative CO2 to CO molecular bookkeeping,delta_e_electronic,True,75.0,2040.854287349512,196912.4729609925,,Sign convention: products minus reactants.
+

@@ -1,0 +1,24 @@
+schema_version: 1
+species:
+  - name: co2
+    formula: CO2
+    charge: 0
+    multiplicity: 1
+    geometry_path: xyz/co2.xyz
+    tags: [co2rr, illustrative, synthetic]
+    notes: Illustrative molecular workflow species; not a complete mechanism.
+  - name: co
+    formula: CO
+    charge: 0
+    multiplicity: 1
+    geometry_path: xyz/co.xyz
+    tags: [co2rr, illustrative, synthetic]
+    notes: Illustrative molecular workflow species; not a complete mechanism.
+  - name: formate
+    formula: CHO2
+    charge: -1
+    multiplicity: 1
+    geometry_path: xyz/formate.xyz
+    tags: [co2rr, illustrative, synthetic]
+    notes: Illustrative molecular workflow species; not a complete mechanism.
+

@@ -75,6 +75,7 @@ Generic pathway example:
 
 Illustrative CO2RR molecular bookkeeping examples:
 
+- `examples/co2rr_molecular/`
 - `examples/pathways/co2rr/co_pathway.yaml`
 - `examples/pathways/co2rr/formate_pathway.yaml`
 

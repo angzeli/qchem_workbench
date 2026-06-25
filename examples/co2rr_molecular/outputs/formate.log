@@ -1,0 +1,7 @@
+ Synthetic Gaussian-like parser fixture for qchem-workbench.
+ Illustrative CO2RR molecular workflow; not scientific data.
+ # wb97xd/6-31g
+
+ SCF Done:  E(RB3LYP) =  -189.0000000000     A.U. after 10 cycles
+ Normal termination of Gaussian 16
+
