@@ -8,10 +8,13 @@ from typing import Any
 
 import yaml
 
+from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
+from qchem_workbench.core.units import HARTREE_TO_EV
 
 
 PATHWAY_SCHEMA_VERSION = 1
+HARTREE_TO_KJ_MOL = 2625.4996394799
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,19 @@ class Reaction:
 @dataclass(frozen=True)
 class Pathway:
     reactions: tuple[Reaction, ...]
+
+
+@dataclass(frozen=True)
+class ReactionEnergyRow:
+    reaction_id: str
+    label: str | None
+    quantity: str
+    delta_hartree: float | None
+    delta_ev: float | None
+    delta_kj_mol: float | None
+    complete: bool
+    missing_species: tuple[str, ...]
+    notes: str | None = None
 
 
 def load_pathway(path: Path, species_registry: list[Species] | None = None) -> Pathway:
@@ -53,6 +69,23 @@ def load_pathway(path: Path, species_registry: list[Species] | None = None) -> P
     if species_registry is not None:
         _validate_referenced_species(pathway_path, reactions, species_registry)
     return Pathway(reactions=reactions)
+
+
+def reaction_electronic_energy_table(
+    pathway: Pathway, results: list[CalculationResult]
+) -> list[ReactionEnergyRow]:
+    energy_by_species = {
+        result.species_name: result.electronic_energy_hartree for result in results
+    }
+    return [
+        _reaction_energy_row(
+            reaction,
+            energy_by_species,
+            quantity="delta_e_electronic",
+            notes="Sign convention: products minus reactants.",
+        )
+        for reaction in pathway.reactions
+    ]
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:
@@ -159,3 +192,52 @@ def _number_or_error(path: Path, index: int, key: str, value: Any) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{path}: reactions[{index}].{key} must be a number")
     return float(value)
+
+
+def _reaction_energy_row(
+    reaction: Reaction,
+    energy_by_species: dict[str, float | None],
+    quantity: str,
+    notes: str | None,
+) -> ReactionEnergyRow:
+    missing_species = tuple(
+        species_name
+        for species_name in sorted(set(reaction.reactants) | set(reaction.products))
+        if energy_by_species.get(species_name) is None
+    )
+    if missing_species:
+        return ReactionEnergyRow(
+            reaction_id=reaction.id,
+            label=reaction.label,
+            quantity=quantity,
+            delta_hartree=None,
+            delta_ev=None,
+            delta_kj_mol=None,
+            complete=False,
+            missing_species=missing_species,
+            notes=notes,
+        )
+
+    delta_hartree = _stoichiometric_sum(reaction.products, energy_by_species) - (
+        _stoichiometric_sum(reaction.reactants, energy_by_species)
+    )
+    return ReactionEnergyRow(
+        reaction_id=reaction.id,
+        label=reaction.label,
+        quantity=quantity,
+        delta_hartree=delta_hartree,
+        delta_ev=delta_hartree * HARTREE_TO_EV,
+        delta_kj_mol=delta_hartree * HARTREE_TO_KJ_MOL,
+        complete=True,
+        missing_species=(),
+        notes=notes,
+    )
+
+
+def _stoichiometric_sum(
+    stoichiometry: dict[str, float], energy_by_species: dict[str, float | None]
+) -> float:
+    return sum(
+        coefficient * float(energy_by_species[species_name])
+        for species_name, coefficient in stoichiometry.items()
+    )
