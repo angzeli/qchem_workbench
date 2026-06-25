@@ -32,6 +32,7 @@ from qchem_workbench.core.registry import load_species_registry
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
 from qchem_workbench.reports.markdown import write_markdown_report
+from qchem_workbench.reports.plotting import plot_pathway_from_csv
 from qchem_workbench.results.store import load_result_collection
 from qchem_workbench.templates.project import (
     PROJECT_DIRECTORIES,
@@ -150,6 +151,14 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--species", type=Path)
     report_parser.add_argument("--out", required=True, type=Path)
     report_parser.set_defaults(func=_report_command)
+
+    plot_pathway_parser = subparsers.add_parser(
+        "plot-pathway", help="plot a generic reaction pathway table"
+    )
+    plot_pathway_parser.add_argument("reaction_table", type=Path)
+    plot_pathway_parser.add_argument("--out", required=True, type=Path)
+    plot_pathway_parser.add_argument("--title")
+    plot_pathway_parser.set_defaults(func=_plot_pathway_command)
     return parser
 
 
@@ -321,6 +330,17 @@ def _report_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Wrote Markdown report to {args.out}.")
+    return 0
+
+
+def _plot_pathway_command(args: argparse.Namespace) -> int:
+    try:
+        plot_pathway_from_csv(args.reaction_table, args.out, title=args.title)
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote pathway plot to {args.out}.")
     return 0
 
 

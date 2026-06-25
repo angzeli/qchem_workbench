@@ -13,6 +13,7 @@ authors = [
   { name = "qchem-workbench contributors" }
 ]
 dependencies = [
+  "matplotlib>=3",
   "PyYAML>=6",
 ]
 

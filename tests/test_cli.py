@@ -831,3 +831,22 @@ def test_report_command_writes_markdown(tmp_path, capsys):
     assert "# qchem-workbench report" in report
     assert "## Quality-check summary" in report
     assert "unmatched_species" in report
+
+
+def test_plot_pathway_command_writes_png(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / "mpl"))
+    table_path = tmp_path / "reaction_table.csv"
+    table_path.write_text(
+        "reaction_id,label,quantity,complete,delta_hartree,delta_ev,delta_kj_mol,"
+        "missing_species,notes\n"
+        "r1,A to B,delta_e_electronic,True,0.1,2.7,262.5,,synthetic fixture\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "pathway.png"
+
+    exit_code = main(["plot-pathway", str(table_path), "--out", str(out_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Wrote pathway plot" in captured.out
+    assert out_path.read_bytes().startswith(b"\x89PNG")
