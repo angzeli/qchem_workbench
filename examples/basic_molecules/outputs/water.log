@@ -1,0 +1,7 @@
+ Synthetic Gaussian-like parser fixture for qchem-workbench.
+ Energies in this file are synthetic and must not be used as scientific data.
+ # wb97xd/6-31g
+
+ SCF Done:  E(RB3LYP) =  -76.0000000000     A.U. after 8 cycles
+ Normal termination of Gaussian 16
+

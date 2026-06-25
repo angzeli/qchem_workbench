@@ -1,0 +1,24 @@
+schema_version: 1
+species:
+  - name: water
+    formula: H2O
+    charge: 0
+    multiplicity: 1
+    geometry_path: xyz/water.xyz
+    tags: [example, synthetic]
+    notes: Basic molecule tutorial species.
+  - name: carbon_dioxide
+    formula: CO2
+    charge: 0
+    multiplicity: 1
+    geometry_path: xyz/carbon_dioxide.xyz
+    tags: [example, synthetic]
+    notes: Basic molecule tutorial species.
+  - name: carbon_monoxide
+    formula: CO
+    charge: 0
+    multiplicity: 1
+    geometry_path: xyz/carbon_monoxide.xyz
+    tags: [example, synthetic]
+    notes: Basic molecule tutorial species.
+
