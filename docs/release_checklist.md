@@ -5,6 +5,7 @@ Use this checklist before tagging or publishing a qchem-workbench release.
 ## Tests
 
 - Run `python -m pytest`.
+- Run `python scripts/validate_examples.py`.
 - Confirm optional PySCF tests skip cleanly when PySCF is not installed.
 - Confirm no test requires Gaussian or other licensed software.
 
