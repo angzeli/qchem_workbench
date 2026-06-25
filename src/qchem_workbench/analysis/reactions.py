@@ -88,6 +88,26 @@ def reaction_electronic_energy_table(
     ]
 
 
+def reaction_gibbs_free_energy_table(
+    pathway: Pathway, results: list[CalculationResult]
+) -> list[ReactionEnergyRow]:
+    energy_by_species = {
+        result.species_name: result.gibbs_free_energy_hartree for result in results
+    }
+    return [
+        _reaction_energy_row(
+            reaction,
+            energy_by_species,
+            quantity="delta_g_gibbs",
+            notes=(
+                "Sign convention: products minus reactants. No standard-state or "
+                "electrochemical corrections applied."
+            ),
+        )
+        for reaction in pathway.reactions
+    ]
+
+
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))

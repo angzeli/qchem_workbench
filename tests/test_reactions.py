@@ -7,6 +7,7 @@ import pytest
 from qchem_workbench.analysis.reactions import HARTREE_TO_KJ_MOL
 from qchem_workbench.analysis.reactions import load_pathway
 from qchem_workbench.analysis.reactions import reaction_electronic_energy_table
+from qchem_workbench.analysis.reactions import reaction_gibbs_free_energy_table
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
 from qchem_workbench.core.units import HARTREE_TO_EV
@@ -32,6 +33,16 @@ def _result(name: str, energy: float | None) -> CalculationResult:
         success=True,
         electronic_energy_hartree=energy,
     )
+
+
+def _gibbs_result(
+    name: str,
+    electronic_energy: float | None,
+    gibbs_energy: float | None,
+) -> CalculationResult:
+    result = _result(name, electronic_energy)
+    result.gibbs_free_energy_hartree = gibbs_energy
+    return result
 
 
 def test_load_valid_reaction_pathway(tmp_path):
@@ -186,3 +197,65 @@ def test_reaction_electronic_energy_unit_conversion(tmp_path):
 
     assert row.delta_ev == pytest.approx(HARTREE_TO_EV)
     assert row.delta_kj_mol == pytest.approx(HARTREE_TO_KJ_MOL)
+
+
+def test_reaction_gibbs_free_energy_complete_data(tmp_path):
+    pathway_path = tmp_path / "pathway.yaml"
+    pathway_path.write_text(
+        "schema_version: 1\n"
+        "reactions:\n"
+        "  - id: r1\n"
+        "    reactants: {A: 1}\n"
+        "    products: {B: 1}\n",
+        encoding="utf-8",
+    )
+
+    row = reaction_gibbs_free_energy_table(
+        load_pathway(pathway_path),
+        [_gibbs_result("A", -100.0, -2.0), _gibbs_result("B", -99.0, -1.25)],
+    )[0]
+
+    assert row.complete is True
+    assert row.quantity == "delta_g_gibbs"
+    assert row.delta_hartree == pytest.approx(0.75)
+    assert "No standard-state" in row.notes
+
+
+def test_reaction_gibbs_free_energy_missing_data(tmp_path):
+    pathway_path = tmp_path / "pathway.yaml"
+    pathway_path.write_text(
+        "schema_version: 1\n"
+        "reactions:\n"
+        "  - id: r1\n"
+        "    reactants: {A: 1}\n"
+        "    products: {B: 1}\n",
+        encoding="utf-8",
+    )
+
+    row = reaction_gibbs_free_energy_table(
+        load_pathway(pathway_path),
+        [_gibbs_result("A", -100.0, -2.0), _gibbs_result("B", -99.0, None)],
+    )[0]
+
+    assert row.complete is False
+    assert row.delta_hartree is None
+    assert row.missing_species == ("B",)
+
+
+def test_reaction_gibbs_free_energy_does_not_fallback_to_electronic(tmp_path):
+    pathway_path = tmp_path / "pathway.yaml"
+    pathway_path.write_text(
+        "schema_version: 1\n"
+        "reactions:\n"
+        "  - id: r1\n"
+        "    reactants: {A: 1}\n"
+        "    products: {B: 1}\n",
+        encoding="utf-8",
+    )
+
+    row = reaction_gibbs_free_energy_table(
+        load_pathway(pathway_path), [_result("A", -2.0), _result("B", -1.0)]
+    )[0]
+
+    assert row.complete is False
+    assert row.missing_species == ("A", "B")
