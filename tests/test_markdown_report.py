@@ -117,3 +117,111 @@ def test_markdown_report_includes_reaction_table_with_units():
     assert "## Reaction energy table" in report
     assert "Delta (eV)" in report
     assert "| r1 | A to B | delta_e_electronic | False | N/A | N/A | N/A | B |" in report
+
+
+def test_method_provenance_consistent_results_include_sources(tmp_path):
+    results = [
+        CalculationResult(
+            species_name="water",
+            backend="gaussian",
+            method="wb97xd",
+            basis="6-31g",
+            task="single_point",
+            success=True,
+            metadata={"solvent": "water"},
+            source_path=tmp_path / "water.log",
+        )
+    ]
+
+    report = generate_markdown_report(results)
+
+    assert "No method/provenance consistency warnings." in report
+    assert "Solvent" in report
+    assert "water.log" in report
+
+
+def test_method_provenance_warns_on_mixed_backend():
+    results = [
+        CalculationResult(
+            species_name="A",
+            backend="gaussian",
+            method="wb97xd",
+            basis="6-31g",
+            task="single_point",
+            success=True,
+        ),
+        CalculationResult(
+            species_name="B",
+            backend="pyscf",
+            method="wb97xd",
+            basis="6-31g",
+            task="single_point",
+            success=True,
+        ),
+    ]
+
+    report = generate_markdown_report(results)
+
+    assert "Multiple backends are present in the result set." in report
+
+
+def test_method_provenance_warns_on_mixed_basis():
+    results = [
+        CalculationResult(
+            species_name="A",
+            backend="gaussian",
+            method="wb97xd",
+            basis="6-31g",
+            task="single_point",
+            success=True,
+        ),
+        CalculationResult(
+            species_name="B",
+            backend="gaussian",
+            method="wb97xd",
+            basis="def2-svp",
+            task="single_point",
+            success=True,
+        ),
+    ]
+
+    report = generate_markdown_report(results)
+
+    assert "Multiple basis sets are present in the result set." in report
+
+
+def test_reaction_report_warns_when_results_are_mixed():
+    results = [
+        CalculationResult(
+            species_name="A",
+            backend="gaussian",
+            method="wb97xd",
+            basis="6-31g",
+            task="single_point",
+            success=True,
+        ),
+        CalculationResult(
+            species_name="B",
+            backend="pyscf",
+            method="b3lyp",
+            basis="sto-3g",
+            task="single_point",
+            success=True,
+        ),
+    ]
+    rows = [
+        ReactionEnergyRow(
+            reaction_id="r1",
+            label=None,
+            quantity="delta_e_electronic",
+            delta_hartree=0.1,
+            delta_ev=2.7,
+            delta_kj_mol=262.5,
+            complete=True,
+            missing_species=(),
+        )
+    ]
+
+    report = generate_markdown_report(results, reaction_rows=rows)
+
+    assert "Reaction rows are shown with mixed backend/method/basis results" in report

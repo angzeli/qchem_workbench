@@ -44,7 +44,7 @@ def generate_markdown_report(
     sections.append(_quality_check_summary(check_list))
     if reaction_row_list:
         sections.append(_reaction_energy_table(reaction_row_list))
-    sections.append(_method_provenance_summary(result_list))
+    sections.append(_method_provenance_summary(result_list, reaction_row_list))
     return "\n\n".join(sections).rstrip() + "\n"
 
 
@@ -198,19 +198,22 @@ def _reaction_energy_table(rows: list[ReactionEnergyRow]) -> str:
     )
 
 
-def _method_provenance_summary(results: list[CalculationResult]) -> str:
-    groups: dict[tuple[str, str, str, str], list[CalculationResult]] = {}
+def _method_provenance_summary(
+    results: list[CalculationResult], reaction_rows: list[ReactionEnergyRow]
+) -> str:
+    groups: dict[tuple[str, str, str, str, str], list[CalculationResult]] = {}
     for result in results:
         key = (
             result.backend,
             result.method or MISSING,
             result.basis or MISSING,
             result.task or MISSING,
+            _metadata_value(result, "solvent"),
         )
         groups.setdefault(key, []).append(result)
 
     rows = []
-    for (backend, method, basis, task), group in sorted(groups.items()):
+    for (backend, method, basis, task, solvent), group in sorted(groups.items()):
         source_paths = sorted(
             str(result.source_path) for result in group if result.source_path is not None
         )
@@ -220,17 +223,66 @@ def _method_provenance_summary(results: list[CalculationResult]) -> str:
                 method,
                 basis,
                 task,
+                solvent,
                 len(group),
                 "; ".join(source_paths) if source_paths else MISSING,
             )
         )
     if not rows:
-        rows = [(MISSING, MISSING, MISSING, MISSING, 0, MISSING)]
+        rows = [(MISSING, MISSING, MISSING, MISSING, MISSING, 0, MISSING)]
 
-    return "## Method/provenance summary\n\n" + _markdown_table(
-        ["Backend", "Method", "Basis", "Task", "Result count", "Source paths"],
+    warnings = _method_consistency_warnings(results, reaction_rows)
+    warning_text = (
+        "No method/provenance consistency warnings."
+        if not warnings
+        else _markdown_table(["Warning"], [(warning,) for warning in warnings])
+    )
+    table = _markdown_table(
+        ["Backend", "Method", "Basis", "Task", "Solvent", "Result count", "Source paths"],
         rows,
     )
+    return f"## Method/provenance summary\n\n{warning_text}\n\n{table}"
+
+
+def _method_consistency_warnings(
+    results: list[CalculationResult], reaction_rows: list[ReactionEnergyRow]
+) -> list[str]:
+    warnings = []
+    if len(_distinct_values(results, "backend")) > 1:
+        warnings.append("Multiple backends are present in the result set.")
+    if len(_distinct_values(results, "method")) > 1:
+        warnings.append("Multiple methods are present in the result set.")
+    if len(_distinct_values(results, "basis")) > 1:
+        warnings.append("Multiple basis sets are present in the result set.")
+    if reaction_rows and len(_backend_method_basis_groups(results)) > 1:
+        warnings.append(
+            "Reaction rows are shown with mixed backend/method/basis results; "
+            "verify each row was computed from a consistent result subset."
+        )
+    return warnings
+
+
+def _distinct_values(results: list[CalculationResult], field_name: str) -> set[str]:
+    return {
+        str(getattr(result, field_name) or MISSING)
+        for result in results
+    }
+
+
+def _backend_method_basis_groups(
+    results: list[CalculationResult],
+) -> set[tuple[str, str, str]]:
+    return {
+        (result.backend, result.method or MISSING, result.basis or MISSING)
+        for result in results
+    }
+
+
+def _metadata_value(result: CalculationResult, key: str) -> str:
+    value = result.metadata.get(key)
+    if value is None or value == "":
+        return MISSING
+    return str(value)
 
 
 def _markdown_table(headers: list[str], rows: Iterable[Iterable[object]]) -> str:
