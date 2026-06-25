@@ -23,6 +23,10 @@ from qchem_workbench.backends.gaussian_input import (
     render_gaussian_input,
 )
 from qchem_workbench.backends.gaussian_parser import parse_gaussian_output
+from qchem_workbench.backends.gaussian_scheduler import (
+    SCHEDULER_NAMES,
+    render_gaussian_scheduler_script,
+)
 from qchem_workbench.backends.pyscf_backend import (
     MissingOptionalDependencyError,
     PySCFBackend,
@@ -113,6 +117,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--include-run-script",
         action="store_true",
         help="include a simple Gaussian run script template in each job folder",
+    )
+    render_gaussian_parser.add_argument(
+        "--scheduler",
+        choices=SCHEDULER_NAMES,
+        help="include a scheduler script template; requires --job-folders",
     )
     render_gaussian_parser.set_defaults(func=_render_gaussian_command)
 
@@ -250,6 +259,7 @@ def _render_gaussian_command(args: argparse.Namespace) -> int:
             force=args.force,
             job_folders=args.job_folders,
             include_run_script=args.include_run_script,
+            scheduler=args.scheduler,
         )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -598,14 +608,20 @@ def _render_gaussian_files(
     force: bool,
     job_folders: bool = False,
     include_run_script: bool = False,
+    scheduler: str | None = None,
 ) -> list[tuple[str, Path]]:
+    if include_run_script and scheduler is None:
+        scheduler = "shell"
     if include_run_script and not job_folders:
         raise ValueError("--include-run-script requires --job-folders")
+    if scheduler is not None and not job_folders:
+        raise ValueError("--scheduler requires --job-folders")
 
     output_dir = Path(out_dir)
     route = gaussian_route_from_spec(spec, additional_keywords=additional_keywords)
+    include_script = scheduler is not None
     jobs = [
-        _gaussian_job_paths(output_dir, species.name, job_folders, include_run_script)
+        _gaussian_job_paths(output_dir, species.name, job_folders, include_script)
         for species in species_list
     ]
     input_paths = [job["input_path"] for job in jobs]
@@ -641,7 +657,8 @@ def _render_gaussian_files(
         path.write_text(content, encoding="utf-8")
         if job["run_script_path"] is not None:
             job["run_script_path"].write_text(
-                _gaussian_run_script(path.name), encoding="utf-8"
+                render_gaussian_scheduler_script(str(scheduler), path.name),
+                encoding="utf-8",
             )
         generated.append((species.name, path))
     return generated

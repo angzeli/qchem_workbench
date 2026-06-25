@@ -414,6 +414,60 @@ def test_render_gaussian_run_script_requires_job_folders(tmp_path):
     assert exit_code == 1
 
 
+def test_render_gaussian_slurm_scheduler_template(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "gaussian_inputs"
+
+    exit_code = main(
+        [
+            "render-gaussian",
+            str(project_path / "species.yaml"),
+            "--method",
+            "wb97xd",
+            "--basis",
+            "6-31+G(d,p)",
+            "--task",
+            "single_point",
+            "--out",
+            str(out_dir),
+            "--job-folders",
+            "--scheduler",
+            "slurm",
+        ]
+    )
+
+    script = (out_dir / "water" / "run_gaussian.sh").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "#SBATCH --job-name=water" in script
+    assert "Template only" in script
+    assert not (out_dir / "water" / "water.log").exists()
+
+
+def test_render_gaussian_scheduler_requires_job_folders(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+
+    exit_code = main(
+        [
+            "render-gaussian",
+            str(project_path / "species.yaml"),
+            "--method",
+            "wb97xd",
+            "--basis",
+            "6-31+G(d,p)",
+            "--task",
+            "single_point",
+            "--out",
+            str(project_path / "gaussian_inputs"),
+            "--scheduler",
+            "slurm",
+        ]
+    )
+
+    assert exit_code == 1
+
+
 def test_parse_gaussian_scans_recursively_and_writes_json(tmp_path):
     outputs = tmp_path / "outputs"
     nested = outputs / "nested"
