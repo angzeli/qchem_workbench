@@ -226,3 +226,47 @@ def test_parse_malformed_frequency_line(tmp_path):
 
     assert result.metadata["frequencies_cm1"] == [250.5]
     assert any("Malformed Gaussian frequency" in warning for warning in result.warnings)
+
+
+def test_parse_unrestricted_spin_info(tmp_path):
+    output_path = tmp_path / "unrestricted.log"
+    output_path.write_text(
+        " # ub3lyp/6-31g\n"
+        " S**2 before annihilation     0.7542,   after     0.7501\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.metadata["s2_before_annihilation"] == 0.7542
+    assert result.metadata["s2_after_annihilation"] == 0.7501
+
+
+def test_parse_missing_spin_info_is_normal(tmp_path):
+    output_path = tmp_path / "closed-shell.log"
+    output_path.write_text(
+        " # rb3lyp/6-31g\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert "s2_before_annihilation" not in result.metadata
+    assert not any("spin" in warning.lower() for warning in result.warnings)
+
+
+def test_parse_malformed_spin_line(tmp_path):
+    output_path = tmp_path / "malformed-spin.log"
+    output_path.write_text(
+        " # ub3lyp/6-31g\n"
+        " S**2 before annihilation unavailable after unavailable\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert "s2_before_annihilation" not in result.metadata
+    assert any("S**2 spin line" in warning for warning in result.warnings)

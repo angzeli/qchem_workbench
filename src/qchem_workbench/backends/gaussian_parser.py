@@ -13,6 +13,13 @@ _SCF_DONE_RE = re.compile(
 )
 _ROUTE_START_RE = re.compile(r"^\s*#")
 _FREQUENCIES_RE = re.compile(r"Frequencies\s+--\s+(.+)")
+_SPIN_LINE_RE = re.compile(r"S\*\*2\s+before\s+annihilation", re.IGNORECASE)
+_SPIN_VALUES_RE = re.compile(
+    r"S\*\*2\s+before\s+annihilation\s+"
+    r"([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?),?\s+after\s+"
+    r"([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)",
+    re.IGNORECASE,
+)
 _THERMOCHEMISTRY_PATTERNS = {
     "zero_point_correction_hartree": re.compile(
         r"Zero-point correction=\s+([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
@@ -96,6 +103,8 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
             min(negative_frequencies) if negative_frequencies else None
         ),
     }
+    spin_metadata = _extract_spin_metadata(text, warnings)
+    metadata.update(spin_metadata)
     if route is not None:
         metadata["route"] = route
 
@@ -223,3 +232,22 @@ def _extract_frequencies(text: str, warnings: list[str]) -> list[float]:
             "Malformed Gaussian frequency token(s) were ignored during parsing."
         )
     return frequencies
+
+
+def _extract_spin_metadata(text: str, warnings: list[str]) -> dict[str, float]:
+    spin_values: dict[str, float] = {}
+
+    for line in text.splitlines():
+        if not _SPIN_LINE_RE.search(line):
+            continue
+
+        match = _SPIN_VALUES_RE.search(line)
+        if not match:
+            warnings.append("Malformed Gaussian S**2 spin line was ignored.")
+            continue
+        spin_values = {
+            "s2_before_annihilation": _parse_float(match.group(1)),
+            "s2_after_annihilation": _parse_float(match.group(2)),
+        }
+
+    return spin_values
