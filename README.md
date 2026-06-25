@@ -40,6 +40,22 @@ installed:
 qchemwb run-pyscf demo/species.yaml --method b3lyp --basis sto-3g --out demo/results/pyscf_results.json
 ```
 
+Render a Gaussian route from a calculation spec in Python:
+
+```python
+from qchem_workbench.backends.gaussian_input import gaussian_route_from_spec
+from qchem_workbench.core.calculation import CalculationSpec
+
+spec = CalculationSpec(
+    backend="gaussian",
+    method="wb97xd",
+    basis="6-31+G(d,p)",
+    task="opt_freq",
+    solvent="smd,solvent=water",
+)
+route = gaussian_route_from_spec(spec)
+```
+
 ## Species Registry
 
 Species registries are YAML files with `schema_version: 1` and a `species`

@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.geometry import MoleculeGeometry, read_xyz
 from qchem_workbench.core.species import Species
+
+
+GAUSSIAN_TASK_PRESETS = {
+    "single_point": (),
+    "opt": ("opt",),
+    "freq": ("freq",),
+    "opt_freq": ("opt", "freq"),
+}
 
 
 @dataclass(frozen=True)
@@ -52,6 +61,34 @@ def render_gaussian_input(
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def gaussian_route_from_spec(
+    calculation_spec: CalculationSpec,
+    additional_keywords: Sequence[str] = (),
+) -> str:
+    if not calculation_spec.method.strip():
+        raise ValueError("Gaussian method cannot be empty")
+    if calculation_spec.basis is None or not calculation_spec.basis.strip():
+        raise ValueError("Gaussian basis cannot be empty")
+
+    try:
+        task_keywords = GAUSSIAN_TASK_PRESETS[calculation_spec.task]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported Gaussian task {calculation_spec.task!r}"
+        ) from exc
+
+    route_parts = [
+        f"{calculation_spec.method.strip()}/{calculation_spec.basis.strip()}",
+        *task_keywords,
+    ]
+    if calculation_spec.solvent:
+        route_parts.append(f"scrf=({calculation_spec.solvent.strip()})")
+    route_parts.extend(
+        keyword.strip() for keyword in additional_keywords if keyword.strip()
+    )
+    return "# " + " ".join(route_parts)
 
 
 def _normalize_route(route: str) -> str:

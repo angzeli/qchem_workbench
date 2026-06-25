@@ -6,6 +6,7 @@ import pytest
 
 from qchem_workbench.backends.gaussian_input import (
     GaussianInputOptions,
+    gaussian_route_from_spec,
     render_gaussian_input,
 )
 from qchem_workbench.core.calculation import CalculationSpec
@@ -149,3 +150,62 @@ def test_render_gaussian_input_requires_route(tmp_path):
 
     with pytest.raises(ValueError, match="route"):
         render_gaussian_input(species, spec, GaussianInputOptions())
+
+
+@pytest.mark.parametrize(
+    ("task", "expected_route"),
+    [
+        ("single_point", "# wb97xd/6-31+G(d,p)"),
+        ("opt", "# wb97xd/6-31+G(d,p) opt"),
+        ("freq", "# wb97xd/6-31+G(d,p) freq"),
+        ("opt_freq", "# wb97xd/6-31+G(d,p) opt freq"),
+    ],
+)
+def test_gaussian_route_task_presets(task, expected_route):
+    spec = CalculationSpec(
+        backend="gaussian",
+        method="wb97xd",
+        basis="6-31+G(d,p)",
+        task=task,
+    )
+
+    assert gaussian_route_from_spec(spec) == expected_route
+
+
+def test_gaussian_route_includes_solvent_when_supplied():
+    spec = CalculationSpec(
+        backend="gaussian",
+        method="wb97xd",
+        basis="6-31+G(d,p)",
+        task="opt_freq",
+        solvent="smd,solvent=water",
+    )
+
+    assert gaussian_route_from_spec(spec) == (
+        "# wb97xd/6-31+G(d,p) opt freq scrf=(smd,solvent=water)"
+    )
+
+
+def test_gaussian_route_appends_additional_keywords():
+    spec = CalculationSpec(
+        backend="gaussian",
+        method="wb97xd",
+        basis="6-31+G(d,p)",
+        task="single_point",
+    )
+
+    assert gaussian_route_from_spec(spec, additional_keywords=("scf=tight",)) == (
+        "# wb97xd/6-31+G(d,p) scf=tight"
+    )
+
+
+def test_gaussian_route_rejects_unknown_task():
+    spec = CalculationSpec(
+        backend="gaussian",
+        method="wb97xd",
+        basis="6-31+G(d,p)",
+        task="unknown",
+    )
+
+    with pytest.raises(ValueError, match="unsupported Gaussian task"):
+        gaussian_route_from_spec(spec)
