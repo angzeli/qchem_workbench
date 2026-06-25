@@ -26,6 +26,13 @@ Show CLI help with:
 qchemwb --help
 ```
 
+Create and validate a starter workflow directory with:
+
+```bash
+qchemwb init demo --template basic
+qchemwb validate demo/species.yaml
+```
+
 ## Species Registry
 
 Species registries are YAML files with `schema_version: 1` and a `species`
