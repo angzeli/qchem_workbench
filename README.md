@@ -33,6 +33,13 @@ qchemwb init demo --template basic
 qchemwb validate demo/species.yaml
 ```
 
+Run PySCF single-point calculations when the optional PySCF dependency is
+installed:
+
+```bash
+qchemwb run-pyscf demo/species.yaml --method b3lyp --basis sto-3g --out demo/results/pyscf_results.json
+```
+
 ## Species Registry
 
 Species registries are YAML files with `schema_version: 1` and a `species`

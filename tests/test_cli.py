@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+
+from qchem_workbench.backends.pyscf_backend import MissingOptionalDependencyError
 from qchem_workbench.cli import main
+from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.registry import load_species_registry
 
 
@@ -99,3 +103,118 @@ def test_init_refuses_to_overwrite_without_force(tmp_path):
 
     assert exit_code == 1
     assert registry_path.read_text(encoding="utf-8") == "sentinel\n"
+
+
+def test_run_pyscf_writes_json_with_mocked_backend(tmp_path, monkeypatch, capsys):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_path = project_path / "results" / "pyscf_results.json"
+
+    class FakeBackend:
+        def run(self, species, spec):
+            return CalculationResult(
+                species_name=species.name,
+                backend="pyscf",
+                method=spec.method,
+                basis=spec.basis,
+                task=spec.task,
+                success=True,
+                electronic_energy_hartree=-1.0,
+            )
+
+    monkeypatch.setattr("qchem_workbench.cli.PySCFBackend", FakeBackend)
+
+    exit_code = main(
+        [
+            "run-pyscf",
+            str(project_path / "species.yaml"),
+            "--method",
+            "b3lyp",
+            "--basis",
+            "sto-3g",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert payload["calculation"]["method"] == "b3lyp"
+    assert payload["calculation"]["basis"] == "sto-3g"
+    assert len(payload["results"]) == 3
+    assert all(result["success"] for result in payload["results"])
+    assert "species\tsuccess" in captured.out
+
+
+def test_run_pyscf_continues_after_species_failure(tmp_path, monkeypatch):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_path = project_path / "results" / "pyscf_results.json"
+
+    class FakeBackend:
+        def run(self, species, spec):
+            if species.name == "carbon_dioxide":
+                raise RuntimeError("synthetic backend failure")
+            return CalculationResult(
+                species_name=species.name,
+                backend="pyscf",
+                method=spec.method,
+                basis=spec.basis,
+                task=spec.task,
+                success=True,
+            )
+
+    monkeypatch.setattr("qchem_workbench.cli.PySCFBackend", FakeBackend)
+
+    exit_code = main(
+        [
+            "run-pyscf",
+            str(project_path / "species.yaml"),
+            "--method",
+            "b3lyp",
+            "--basis",
+            "sto-3g",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    failed = [result for result in payload["results"] if not result["success"]]
+    assert exit_code == 1
+    assert len(payload["results"]) == 3
+    assert failed[0]["species_name"] == "carbon_dioxide"
+    assert "synthetic backend failure" in failed[0]["warnings"][0]
+
+
+def test_run_pyscf_reports_missing_optional_dependency(
+    tmp_path, monkeypatch, capsys
+):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_path = project_path / "results" / "pyscf_results.json"
+
+    class MissingBackend:
+        def run(self, species, spec):
+            raise MissingOptionalDependencyError("install optional PySCF dependency")
+
+    monkeypatch.setattr("qchem_workbench.cli.PySCFBackend", MissingBackend)
+
+    exit_code = main(
+        [
+            "run-pyscf",
+            str(project_path / "species.yaml"),
+            "--method",
+            "b3lyp",
+            "--basis",
+            "sto-3g",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "install optional PySCF dependency" in captured.err
+    assert not out_path.exists()

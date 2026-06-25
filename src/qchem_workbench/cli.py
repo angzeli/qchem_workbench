@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from qchem_workbench import __version__
+from qchem_workbench.backends.pyscf_backend import (
+    MissingOptionalDependencyError,
+    PySCFBackend,
+)
+from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.registry import load_species_registry
+from qchem_workbench.core.result import CalculationResult
+from qchem_workbench.core.species import Species
 from qchem_workbench.templates.project import (
     PROJECT_DIRECTORIES,
     TEMPLATE_NAMES,
@@ -47,6 +55,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_parser.add_argument("registry", type=Path)
     validate_parser.set_defaults(func=_validate_command)
+
+    run_pyscf_parser = subparsers.add_parser(
+        "run-pyscf", help="run PySCF single-point calculations"
+    )
+    run_pyscf_parser.add_argument("registry", type=Path)
+    run_pyscf_parser.add_argument("--method", required=True)
+    run_pyscf_parser.add_argument("--basis", required=True)
+    run_pyscf_parser.add_argument("--out", required=True, type=Path)
+    run_pyscf_parser.set_defaults(func=_run_pyscf_command)
     return parser
 
 
@@ -82,6 +99,37 @@ def _validate_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_pyscf_command(args: argparse.Namespace) -> int:
+    try:
+        species_list = load_species_registry(args.registry)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    backend = PySCFBackend()
+    spec = CalculationSpec(
+        backend="pyscf",
+        method=args.method,
+        basis=args.basis,
+        task="single_point",
+    )
+    results: list[CalculationResult] = []
+
+    for species in species_list:
+        try:
+            result = backend.run(species, spec)
+        except MissingOptionalDependencyError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except Exception as exc:
+            result = _exception_result(species, spec, exc)
+        results.append(result)
+
+    _write_result_collection(args.out, spec, results)
+    _print_result_summary(results)
+    return 0 if all(result.success for result in results) else 1
+
+
 def _initialize_project(path: Path, template: str, force: bool) -> None:
     target = Path(path)
     if target.exists() and not target.is_dir():
@@ -105,3 +153,47 @@ def _initialize_project(path: Path, template: str, force: bool) -> None:
         destination = target / relative_path
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(content, encoding="utf-8")
+
+
+def _write_result_collection(
+    path: Path, spec: CalculationSpec, results: list[CalculationResult]
+) -> None:
+    payload = {
+        "schema_version": 1,
+        "calculation": spec.to_dict(),
+        "results": [result.to_dict() for result in results],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def _print_result_summary(results: list[CalculationResult]) -> None:
+    print("species\tsuccess\telectronic_energy_hartree\twarnings")
+    for result in results:
+        energy = (
+            ""
+            if result.electronic_energy_hartree is None
+            else f"{result.electronic_energy_hartree:.12g}"
+        )
+        print(
+            f"{result.species_name}\t{result.success}\t{energy}\t"
+            f"{len(result.warnings)}"
+        )
+
+
+def _exception_result(
+    species: Species, spec: CalculationSpec, exc: Exception
+) -> CalculationResult:
+    return CalculationResult(
+        species_name=species.name,
+        backend="pyscf",
+        method=spec.method,
+        basis=spec.basis,
+        task=spec.task,
+        success=False,
+        warnings=[f"Backend raised exception: {exc}"],
+        metadata={"exception_type": type(exc).__name__},
+        source_path=species.geometry_path,
+    )
