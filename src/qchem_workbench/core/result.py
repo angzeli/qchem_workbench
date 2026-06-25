@@ -61,3 +61,39 @@ class CalculationResult:
             "metadata": dict(self.metadata),
             "source_path": str(self.source_path) if self.source_path else None,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CalculationResult":
+        source_path = data.get("source_path")
+        return cls(
+            species_name=data["species_name"],
+            backend=data["backend"],
+            method=data.get("method"),
+            basis=data.get("basis"),
+            task=data.get("task"),
+            success=bool(data["success"]),
+            electronic_energy_hartree=data.get("electronic_energy_hartree"),
+            gibbs_free_energy_hartree=data.get("gibbs_free_energy_hartree"),
+            zero_point_correction_hartree=data.get("zero_point_correction_hartree"),
+            thermal_correction_energy_hartree=data.get(
+                "thermal_correction_energy_hartree"
+            ),
+            thermal_correction_enthalpy_hartree=data.get(
+                "thermal_correction_enthalpy_hartree"
+            ),
+            thermal_correction_gibbs_hartree=data.get(
+                "thermal_correction_gibbs_hartree"
+            ),
+            sum_electronic_zero_point_energy_hartree=data.get(
+                "sum_electronic_zero_point_energy_hartree"
+            ),
+            sum_electronic_thermal_free_energy_hartree=data.get(
+                "sum_electronic_thermal_free_energy_hartree"
+            ),
+            homo_ev=data.get("homo_ev"),
+            lumo_ev=data.get("lumo_ev"),
+            gap_ev=data.get("gap_ev"),
+            warnings=list(data.get("warnings", [])),
+            metadata=dict(data.get("metadata", {})),
+            source_path=Path(source_path) if source_path else None,
+        )
