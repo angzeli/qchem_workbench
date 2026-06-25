@@ -11,11 +11,13 @@ from qchem_workbench.backends.pyscf_backend import (
     PYSCF_INSTALL_HINT,
     PySCFBackend,
     _geometry_to_pyscf_atom,
+    _extract_orbital_summary,
     _result_from_mean_field,
 )
 from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.geometry import Atom, MoleculeGeometry
 from qchem_workbench.core.species import Species
+from qchem_workbench.core.units import HARTREE_TO_EV
 
 
 def test_pyscf_backend_import_is_lazy():
@@ -94,6 +96,40 @@ def test_result_from_mean_field_marks_nonconvergence():
     assert "did not converge" in result.warnings[0]
 
 
+def test_restricted_orbital_summary():
+    class MeanField:
+        mo_energy = [-0.5, 0.1]
+        mo_occ = [2.0, 0.0]
+
+    summary, metadata = _extract_orbital_summary(MeanField())
+
+    assert summary["homo_ev"] == pytest.approx(-0.5 * HARTREE_TO_EV)
+    assert summary["lumo_ev"] == pytest.approx(0.1 * HARTREE_TO_EV)
+    assert summary["gap_ev"] == pytest.approx(0.6 * HARTREE_TO_EV)
+    assert metadata == {}
+
+
+def test_unrestricted_orbital_summary_metadata_is_explicit():
+    class MeanField:
+        mo_energy = ([-0.4, 0.2], [-0.3, 0.25])
+        mo_occ = ([1.0, 0.0], [1.0, 0.0])
+
+    summary, metadata = _extract_orbital_summary(MeanField())
+
+    assert summary["homo_ev"] == pytest.approx(-0.3 * HARTREE_TO_EV)
+    assert summary["lumo_ev"] == pytest.approx(0.2 * HARTREE_TO_EV)
+    assert summary["gap_ev"] == pytest.approx(0.5 * HARTREE_TO_EV)
+    assert metadata["alpha"]["homo_ev"] == pytest.approx(-0.4 * HARTREE_TO_EV)
+    assert metadata["beta"]["lumo_ev"] == pytest.approx(0.25 * HARTREE_TO_EV)
+
+
+def test_missing_orbitals_remain_missing():
+    summary, metadata = _extract_orbital_summary(object())
+
+    assert summary == {"homo_ev": None, "lumo_ev": None, "gap_ev": None}
+    assert metadata == {}
+
+
 def test_pyscf_single_point_runs_when_installed(tmp_path):
     pytest.importorskip("pyscf")
 
@@ -126,3 +162,4 @@ def test_pyscf_single_point_runs_when_installed(tmp_path):
     assert result.metadata["n_atoms"] == 2
     assert result.metadata["pyscf_spin"] == 0
     assert result.electronic_energy_hartree is not None
+    assert result.gap_ev is None or result.gap_ev >= 0.0
