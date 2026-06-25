@@ -5,7 +5,7 @@ from qchem_workbench import analysis, backends, core, projects, reports, results
 
 
 def test_package_imports():
-    assert qchem_workbench.__version__ == "0.1.0"
+    assert qchem_workbench.__version__ == "1.0.0"
 
 
 def test_public_package_exports():

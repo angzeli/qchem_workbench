@@ -28,7 +28,7 @@ def test_cli_version(capsys):
         assert exc.code == 0
 
     captured = capsys.readouterr()
-    assert "qchemwb 0.1.0" in captured.out
+    assert "qchemwb 1.0.0" in captured.out
 
 
 def test_init_blank(tmp_path):
