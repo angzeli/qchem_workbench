@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 
 SUPPORTED_ELEMENT_SYMBOLS = frozenset(
     {
@@ -156,6 +158,83 @@ def geometry_to_xyz_string(geometry: MoleculeGeometry) -> str:
     return "\n".join(lines) + "\n"
 
 
+def translate_geometry(
+    geometry: MoleculeGeometry, vector: tuple[float, float, float]
+) -> MoleculeGeometry:
+    dx, dy, dz = _vector3(vector, "translation vector")
+    return MoleculeGeometry(
+        atoms=tuple(
+            Atom(atom.symbol, atom.x + dx, atom.y + dy, atom.z + dz)
+            for atom in geometry.atoms
+        ),
+        comment=geometry.comment,
+    )
+
+
+def geometry_centroid(geometry: MoleculeGeometry) -> tuple[float, float, float]:
+    _require_atoms(geometry)
+    coordinates = _coordinate_array(geometry)
+    centroid = coordinates.mean(axis=0)
+    return tuple(float(value) for value in centroid)
+
+
+def center_geometry_at_centroid(geometry: MoleculeGeometry) -> MoleculeGeometry:
+    cx, cy, cz = geometry_centroid(geometry)
+    return translate_geometry(geometry, (-cx, -cy, -cz))
+
+
+def atom_distance(
+    geometry: MoleculeGeometry, index_a: int, index_b: int
+) -> float:
+    coordinates = _coordinate_array(geometry)
+    try:
+        delta = coordinates[index_a] - coordinates[index_b]
+    except IndexError as exc:
+        raise ValueError("atom index out of range") from exc
+    return float(np.linalg.norm(delta))
+
+
+def pairwise_distance_matrix(geometry: MoleculeGeometry) -> np.ndarray:
+    coordinates = _coordinate_array(geometry)
+    if len(coordinates) == 0:
+        return np.zeros((0, 0), dtype=float)
+    deltas = coordinates[:, np.newaxis, :] - coordinates[np.newaxis, :, :]
+    return np.linalg.norm(deltas, axis=2)
+
+
+def rmsd(
+    geometry_a: MoleculeGeometry,
+    geometry_b: MoleculeGeometry,
+    *,
+    align: bool = False,
+) -> float:
+    _validate_same_atom_order(geometry_a, geometry_b)
+    _require_atoms(geometry_a)
+    coordinates_a = _coordinate_array(geometry_a)
+    coordinates_b = _coordinate_array(geometry_b)
+    if align:
+        coordinates_a = _kabsch_aligned_coordinates(coordinates_a, coordinates_b)
+    delta = coordinates_a - coordinates_b
+    return float(np.sqrt(np.mean(np.sum(delta * delta, axis=1))))
+
+
+def kabsch_align_geometry(
+    mobile: MoleculeGeometry, reference: MoleculeGeometry
+) -> MoleculeGeometry:
+    _validate_same_atom_order(mobile, reference)
+    _require_atoms(mobile)
+    aligned = _kabsch_aligned_coordinates(
+        _coordinate_array(mobile), _coordinate_array(reference)
+    )
+    return MoleculeGeometry(
+        atoms=tuple(
+            Atom(atom.symbol, float(x), float(y), float(z))
+            for atom, (x, y, z) in zip(mobile.atoms, aligned)
+        ),
+        comment=mobile.comment,
+    )
+
+
 def _parse_xyz_frame(
     xyz_path: Path, lines: list[str], line_index: int
 ) -> MoleculeGeometry:
@@ -209,6 +288,51 @@ def _parse_atom_line(path: Path, line_number: int, line: str) -> Atom:
         ) from exc
 
     return Atom(symbol=symbol, x=x, y=y, z=z)
+
+
+def _coordinate_array(geometry: MoleculeGeometry) -> np.ndarray:
+    return np.array([[atom.x, atom.y, atom.z] for atom in geometry.atoms], dtype=float)
+
+
+def _vector3(value: tuple[float, float, float], label: str) -> tuple[float, float, float]:
+    if len(value) != 3:
+        raise ValueError(f"{label} must contain exactly three values")
+    return tuple(float(component) for component in value)
+
+
+def _require_atoms(geometry: MoleculeGeometry) -> None:
+    if not geometry.atoms:
+        raise ValueError("geometry must contain at least one atom")
+
+
+def _validate_same_atom_order(
+    geometry_a: MoleculeGeometry, geometry_b: MoleculeGeometry
+) -> None:
+    if len(geometry_a.atoms) != len(geometry_b.atoms):
+        raise ValueError("geometries must contain the same number of atoms")
+    for index, (atom_a, atom_b) in enumerate(zip(geometry_a.atoms, geometry_b.atoms)):
+        if atom_a.symbol != atom_b.symbol:
+            raise ValueError(
+                "geometries must use the same atom ordering; "
+                f"symbol mismatch at index {index}: {atom_a.symbol!r} != "
+                f"{atom_b.symbol!r}"
+            )
+
+
+def _kabsch_aligned_coordinates(
+    mobile_coordinates: np.ndarray, reference_coordinates: np.ndarray
+) -> np.ndarray:
+    mobile_centroid = mobile_coordinates.mean(axis=0)
+    reference_centroid = reference_coordinates.mean(axis=0)
+    mobile_centered = mobile_coordinates - mobile_centroid
+    reference_centered = reference_coordinates - reference_centroid
+
+    covariance = mobile_centered.T @ reference_centered
+    left, _, right_transpose = np.linalg.svd(covariance)
+    correction = np.eye(3)
+    correction[2, 2] = np.sign(np.linalg.det(left @ right_transpose))
+    rotation = left @ correction @ right_transpose
+    return mobile_centered @ rotation + reference_centroid
 
 
 def _format_coordinate(value: float) -> str:

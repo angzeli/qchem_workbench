@@ -51,6 +51,10 @@ are nonempty, multiplicities are positive, and geometry paths are present.
 deterministic and strict: atom counts must match exactly, coordinates must be
 numeric, and element symbols must be in the supported symbol set.
 
+Geometry utilities support centroid translation, distance matrices, RMSD, and
+optional Kabsch alignment. RMSD and alignment require identical atom ordering;
+the utilities do not perform atom matching or symmetry-aware comparisons.
+
 `CalculationSpec` is a backend-independent request object with backend, method,
 basis, task, solvent, charge, multiplicity, and keyword fields.
 
