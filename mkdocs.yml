@@ -5,6 +5,7 @@ nav:
   - Overview: index.md
   - Installation: installation.md
   - Quickstart: quickstart.md
+  - API Stability: api_stability.md
   - Species Registry: species_registry.md
   - Backend Adapters: backend_adapters.md
   - Parsers: parsers.md
@@ -12,6 +13,7 @@ nav:
   - Campaign Workflows: campaign_workflows.md
   - Electrochemistry: electrochemistry.md
   - Scientific Caveats: scientific_caveats.md
+  - v1 Example Compatibility: v1_examples.md
   - Developer Guide: developer_guide.md
   - CI: ci.md
   - Release Checklist: release_checklist.md

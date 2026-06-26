@@ -31,7 +31,7 @@ Core modules must stay generic. Domain examples such as CO2RR belong under
 
 ## Public API Stability
 
-For v1.0, the stable public Python API is the set of names exported through
+For v2.0, the stable public Python API is the set of names exported through
 package-level `__all__` values in:
 
 - `qchem_workbench`
@@ -39,13 +39,16 @@ package-level `__all__` values in:
 - `qchem_workbench.analysis`
 - `qchem_workbench.backends`
 - `qchem_workbench.campaigns`
+- `qchem_workbench.geometry`
 - `qchem_workbench.projects`
 - `qchem_workbench.reports`
 - `qchem_workbench.results`
+- `qchem_workbench.schema`
+- `qchem_workbench.templates`
 
 Underscore-prefixed helpers and unexported implementation details are private.
-The CLI command names shown by `qchemwb --help` are the stable v1.0 command
-surface.
+The CLI command names shown by `qchemwb --help` are the stable v2.0 command
+surface. See `docs/api_stability.md` for stable and experimental surfaces.
 
 ## Core Models
 

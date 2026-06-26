@@ -29,6 +29,13 @@ SCHEMA_FILE_TYPES = {
     "campaign": CAMPAIGN_SCHEMA_VERSION,
 }
 
+__all__ = [
+    "SCHEMA_FILE_TYPES",
+    "SchemaCheckReport",
+    "SchemaMigrationStatus",
+    "check_schema_file",
+]
+
 
 @dataclass(frozen=True)
 class SchemaMigrationStatus:
