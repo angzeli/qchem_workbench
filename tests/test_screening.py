@@ -7,7 +7,9 @@ from qchem_workbench.analysis.quality_checks import QualityCheck
 from qchem_workbench.analysis.reactions import ReactionEnergyRow
 from qchem_workbench.analysis.screening import (
     build_descriptor_table,
+    rank_descriptor_rows,
     write_descriptor_table_csv,
+    write_ranked_candidates_csv,
 )
 from qchem_workbench.campaigns import load_campaign_manifest
 from qchem_workbench.core.result import CalculationResult
@@ -232,6 +234,127 @@ def test_descriptor_table_csv_output(tmp_path):
     assert rows[0]["electronic_energy_hartree"] == "-76.0"
 
 
+def test_ranking_minimises_descriptor_and_preserves_score_component(tmp_path):
+    campaign = _ranking_campaign(
+        tmp_path,
+        ranking=(
+            "      - descriptor: adsorption_energy_ev\n"
+            "        direction: minimise\n"
+            "        weight: 1.0\n"
+        ),
+    )
+    rows = [
+        {"candidate_id": "a", "adsorption_energy_ev": "-0.5"},
+        {"candidate_id": "b", "adsorption_energy_ev": "-0.2"},
+    ]
+
+    ranked = rank_descriptor_rows(campaign, rows)
+
+    assert ranked.rows[0]["candidate_id"] == "a"
+    assert ranked.rows[0]["rank"] == 1
+    assert ranked.rows[0]["rank_score"] == 0.5
+    assert ranked.rows[0]["score_component_adsorption_energy_ev"] == 0.5
+    assert ranked.rows[1]["candidate_id"] == "b"
+    assert ranked.rows[1]["rank"] == 2
+
+
+def test_ranking_uses_visible_weighted_score_and_ties(tmp_path):
+    campaign = _ranking_campaign(
+        tmp_path,
+        ranking=(
+            "      - descriptor: gap_ev\n"
+            "        direction: maximize\n"
+            "        weight: 2.0\n"
+            "      - descriptor: adsorption_energy_ev\n"
+            "        direction: minimize\n"
+            "        weight: 1.0\n"
+        ),
+    )
+    rows = [
+        {"candidate_id": "a", "gap_ev": "2.0", "adsorption_energy_ev": "-1.0"},
+        {"candidate_id": "b", "gap_ev": "2.0", "adsorption_energy_ev": "-1.0"},
+        {"candidate_id": "c", "gap_ev": "1.0", "adsorption_energy_ev": "-0.5"},
+    ]
+
+    ranked = rank_descriptor_rows(campaign, rows)
+
+    assert [row["candidate_id"] for row in ranked.rows] == ["a", "b", "c"]
+    assert ranked.rows[0]["rank"] == 1
+    assert ranked.rows[1]["rank"] == 1
+    assert ranked.rows[2]["rank"] == 3
+    assert ranked.rows[0]["score_component_gap_ev"] == 4.0
+    assert ranked.rows[0]["score_component_adsorption_energy_ev"] == 1.0
+
+
+def test_ranking_filters_quality_errors_and_descriptor_ranges(tmp_path):
+    campaign = _ranking_campaign(
+        tmp_path,
+        ranking=(
+            "      - descriptor: quality_error_count\n"
+            "        filter: exclude_quality_errors\n"
+            "      - descriptor: gap_ev\n"
+            "        minimum: 1.0\n"
+            "      - descriptor: gap_ev\n"
+            "        direction: maximize\n"
+        ),
+    )
+    rows = [
+        {"candidate_id": "a", "gap_ev": "2.0", "quality_error_count": "0"},
+        {"candidate_id": "b", "gap_ev": "3.0", "quality_error_count": "1"},
+        {"candidate_id": "c", "gap_ev": "0.5", "quality_error_count": "0"},
+    ]
+
+    ranked = rank_descriptor_rows(campaign, rows)
+
+    assert ranked.rows[0]["candidate_id"] == "a"
+    assert ranked.rows[0]["rank_status"] == "ranked"
+    excluded = {row["candidate_id"]: row for row in ranked.rows[1:]}
+    assert excluded["b"]["rank_status"] == "excluded"
+    assert excluded["b"]["ranking_reasons"] == "quality_errors_present"
+    assert excluded["c"]["ranking_reasons"] == "below_minimum:gap_ev"
+
+
+def test_ranking_keeps_missing_descriptor_visible(tmp_path):
+    campaign = _ranking_campaign(
+        tmp_path,
+        ranking=(
+            "      - descriptor: gap_ev\n"
+            "        direction: maximize\n"
+        ),
+    )
+    rows = [{"candidate_id": "a", "gap_ev": ""}]
+
+    ranked = rank_descriptor_rows(campaign, rows)
+
+    assert ranked.rows[0]["rank"] == ""
+    assert ranked.rows[0]["rank_status"] == "excluded"
+    assert ranked.rows[0]["ranking_reasons"] == "missing_descriptor:gap_ev"
+    assert ranked.rows[0]["score_component_gap_ev"] == ""
+
+
+def test_ranked_candidates_csv_output(tmp_path):
+    campaign = _ranking_campaign(
+        tmp_path,
+        ranking=(
+            "      - descriptor: gap_ev\n"
+            "        direction: maximize\n"
+        ),
+    )
+    ranked = rank_descriptor_rows(
+        campaign,
+        [{"candidate_id": "a", "gap_ev": "2.0"}],
+    )
+    out_path = tmp_path / "ranked.csv"
+
+    write_ranked_candidates_csv(out_path, ranked)
+
+    with out_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["rank"] == "1"
+    assert rows[0]["rank_score"] == "2.0"
+    assert rows[0]["score_component_gap_ev"] == "2.0"
+
+
 def _campaign(tmp_path, *, descriptors: str):
     manifest_path = tmp_path / "campaign.yaml"
     manifest_path.write_text(
@@ -244,6 +367,35 @@ def _campaign(tmp_path, *, descriptors: str):
         "      species: water\n"
         "  descriptors:\n"
         f"{descriptors}",
+        encoding="utf-8",
+    )
+    return load_campaign_manifest(manifest_path)
+
+
+def _ranking_campaign(tmp_path, *, ranking: str):
+    manifest_path = tmp_path / "ranking_campaign.yaml"
+    manifest_path.write_text(
+        "schema_version: 1\n"
+        "campaign:\n"
+        "  name: demo\n"
+        "  results: results/results.json\n"
+        "  candidates:\n"
+        "    - id: a\n"
+        "      species: a\n"
+        "    - id: b\n"
+        "      species: b\n"
+        "    - id: c\n"
+        "      species: c\n"
+        "  descriptors:\n"
+        "    - name: gap_ev\n"
+        "      source: result\n"
+        "      field: gap_ev\n"
+        "    - name: adsorption_energy_ev\n"
+        "      source: adsorption\n"
+        "      field: adsorption_ev\n"
+        "  ranking:\n"
+        "    rules:\n"
+        f"{ranking}",
         encoding="utf-8",
     )
     return load_campaign_manifest(manifest_path)

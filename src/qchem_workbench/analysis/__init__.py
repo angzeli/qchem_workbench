@@ -58,8 +58,12 @@ from qchem_workbench.analysis.result_matching import (
 )
 from qchem_workbench.analysis.screening import (
     DescriptorTable,
+    RankedCandidateTable,
     build_descriptor_table,
+    rank_descriptor_rows,
+    rank_descriptor_table,
     write_descriptor_table_csv,
+    write_ranked_candidates_csv,
 )
 
 __all__ = [
@@ -72,6 +76,7 @@ __all__ = [
     "ConformerSelection",
     "ConformerSelectionReport",
     "DescriptorTable",
+    "RankedCandidateTable",
     "BOLTZMANN_EV_PER_K",
     "CORRECTION_TARGET_TYPES",
     "CHEFreeEnergyRow",
@@ -108,7 +113,10 @@ __all__ = [
     "match_results_to_species",
     "reaction_electronic_energy_table",
     "reaction_gibbs_free_energy_table",
+    "rank_descriptor_rows",
+    "rank_descriptor_table",
     "run_quality_checks",
     "select_lowest_energy_conformers",
     "write_descriptor_table_csv",
+    "write_ranked_candidates_csv",
 ]
