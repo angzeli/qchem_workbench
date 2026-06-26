@@ -12,6 +12,12 @@ from qchem_workbench.backends.gaussian_scheduler import (
     SCHEDULER_NAMES,
     render_gaussian_scheduler_script,
 )
+from qchem_workbench.backends.orca_input import (
+    ORCA_TASK_PRESETS,
+    ORCAInputOptions,
+    orca_route_from_spec,
+    render_orca_input,
+)
 from qchem_workbench.backends.pyscf_backend import (
     MissingOptionalDependencyError,
     PySCFBackend,
@@ -22,10 +28,14 @@ __all__ = [
     "GAUSSIAN_TASK_PRESETS",
     "GaussianInputOptions",
     "MissingOptionalDependencyError",
+    "ORCAInputOptions",
+    "ORCA_TASK_PRESETS",
     "PySCFBackend",
     "SCHEDULER_NAMES",
     "gaussian_route_from_spec",
+    "orca_route_from_spec",
     "parse_gaussian_output",
     "render_gaussian_input",
     "render_gaussian_scheduler_script",
+    "render_orca_input",
 ]
