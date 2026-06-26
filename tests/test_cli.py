@@ -2003,6 +2003,63 @@ def test_plot_spectrum_command_writes_png_and_csv(tmp_path, monkeypatch, capsys)
     assert "intensity_km_mol" in csv_path.read_text(encoding="utf-8").splitlines()[0]
 
 
+def test_descriptor_table_command_writes_csv(tmp_path, capsys):
+    campaign_path = tmp_path / "campaign.yaml"
+    campaign_path.write_text(
+        "schema_version: 1\n"
+        "campaign:\n"
+        "  name: demo\n"
+        "  results: results/results.json\n"
+        "  candidates:\n"
+        "    - id: water\n"
+        "      species: water\n"
+        "  descriptors:\n"
+        "    - name: electronic_energy_hartree\n"
+        "      source: result\n"
+        "      field: electronic_energy_hartree\n"
+        "    - name: gap_ev\n"
+        "      source: result\n"
+        "      field: gap_ev\n",
+        encoding="utf-8",
+    )
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="wb97xd",
+                basis="6-31g",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-76.0,
+            )
+        ],
+    )
+    out_path = tmp_path / "descriptors.csv"
+
+    exit_code = main(
+        [
+            "descriptor-table",
+            str(campaign_path),
+            str(results_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    with out_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert exit_code == 0
+    assert "Wrote descriptor table for 1 candidate" in captured.out
+    assert rows[0]["candidate_id"] == "water"
+    assert rows[0]["electronic_energy_hartree"] == "-76.0"
+    assert rows[0]["gap_ev"] == ""
+    assert rows[0]["quality_flags"] == ""
+
+
 def test_run_project_renders_gaussian_inputs(tmp_path, capsys):
     project_path = tmp_path / "demo"
     assert main(["init", str(project_path), "--template", "basic"]) == 0

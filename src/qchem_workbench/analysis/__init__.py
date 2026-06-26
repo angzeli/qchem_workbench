@@ -56,6 +56,11 @@ from qchem_workbench.analysis.result_matching import (
     SpeciesResultMatch,
     match_results_to_species,
 )
+from qchem_workbench.analysis.screening import (
+    DescriptorTable,
+    build_descriptor_table,
+    write_descriptor_table_csv,
+)
 
 __all__ = [
     "ADSORPTION_SCHEMA_VERSION",
@@ -66,6 +71,7 @@ __all__ = [
     "AmbiguousSpeciesMatch",
     "ConformerSelection",
     "ConformerSelectionReport",
+    "DescriptorTable",
     "BOLTZMANN_EV_PER_K",
     "CORRECTION_TARGET_TYPES",
     "CHEFreeEnergyRow",
@@ -93,6 +99,7 @@ __all__ = [
     "adsorption_gibbs_free_energy_table",
     "apply_corrections",
     "attach_corrections",
+    "build_descriptor_table",
     "che_free_energy_table",
     "che_limiting_potential",
     "load_pathway",
@@ -103,4 +110,5 @@ __all__ = [
     "reaction_gibbs_free_energy_table",
     "run_quality_checks",
     "select_lowest_energy_conformers",
+    "write_descriptor_table_csv",
 ]

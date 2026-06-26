@@ -30,6 +30,10 @@ from qchem_workbench.analysis.reactions import load_pathway
 from qchem_workbench.analysis.reactions import reaction_electronic_energy_table
 from qchem_workbench.analysis.reactions import reaction_gibbs_free_energy_table
 from qchem_workbench.analysis.result_matching import match_results_to_species
+from qchem_workbench.analysis.screening import (
+    build_descriptor_table,
+    write_descriptor_table_csv,
+)
 from qchem_workbench.backends.ase_adapter import ASEUnavailableError, from_ase_atoms
 from qchem_workbench.backends.ase_adsorption import place_adsorbate_from_yaml
 from qchem_workbench.backends.ase_surface import (
@@ -69,6 +73,7 @@ from qchem_workbench.core.geometry import read_xyz_frames, write_xyz_frames
 from qchem_workbench.core.registry import load_species_registry
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
+from qchem_workbench.campaigns import load_campaign_manifest
 from qchem_workbench.core.structure import AtomisticStructure
 from qchem_workbench.projects.manifest import ProjectManifest, load_project_manifest
 from qchem_workbench.reports.markdown import write_markdown_report
@@ -368,6 +373,14 @@ def build_parser() -> argparse.ArgumentParser:
     plot_spectrum_parser.add_argument("--width", type=float, default=20.0)
     plot_spectrum_parser.add_argument("--step", type=float, default=1.0)
     plot_spectrum_parser.set_defaults(func=_plot_spectrum_command)
+
+    descriptor_table_parser = subparsers.add_parser(
+        "descriptor-table", help="build a screening descriptor CSV"
+    )
+    descriptor_table_parser.add_argument("campaign", type=Path)
+    descriptor_table_parser.add_argument("results", type=Path)
+    descriptor_table_parser.add_argument("--out", required=True, type=Path)
+    descriptor_table_parser.set_defaults(func=_descriptor_table_command)
 
     run_project_parser = subparsers.add_parser(
         "run-project", help="run explicitly configured project manifest steps"
@@ -854,6 +867,25 @@ def _plot_spectrum_command(args: argparse.Namespace) -> int:
 
     print(f"Wrote {args.type.upper()} spectrum plot to {plot_path}.")
     print(f"Wrote broadened spectrum CSV to {csv_path}.")
+    return 0
+
+
+def _descriptor_table_command(args: argparse.Namespace) -> int:
+    try:
+        campaign = load_campaign_manifest(args.campaign)
+        results = load_result_collection(args.results)
+        checks = run_quality_checks(results)
+        table = build_descriptor_table(
+            campaign,
+            results,
+            quality_checks=checks,
+        )
+        write_descriptor_table_csv(args.out, table)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote descriptor table for {len(table.rows)} candidate(s) to {args.out}.")
     return 0
 
 
