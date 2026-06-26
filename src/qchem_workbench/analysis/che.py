@@ -9,10 +9,16 @@ from typing import Any
 import yaml
 
 from qchem_workbench.analysis.corrections import CorrectionTerm
+from qchem_workbench.analysis.reactions import HARTREE_TO_KJ_MOL
+from qchem_workbench.core.result import CalculationResult
+from qchem_workbench.core.units import HARTREE_TO_EV
 
 
 CHE_SCHEMA_VERSION = 1
 SUPPORTED_POTENTIAL_REFERENCES = ("SHE", "RHE", "user_defined")
+DEFAULT_CHE_TEMPERATURE_K = 298.15
+BOLTZMANN_EV_PER_K = 8.617333262145e-5
+LN_10 = 2.302585092994046
 
 
 @dataclass(frozen=True)
@@ -33,6 +39,22 @@ class CHEReaction:
 @dataclass(frozen=True)
 class CHEPathway:
     reactions: tuple[CHEReaction, ...]
+    notes: str | None = None
+
+
+@dataclass(frozen=True)
+class CHEFreeEnergyRow:
+    reaction_id: str
+    label: str | None
+    complete: bool
+    uncorrected_delta_g_hartree: float | None
+    uncorrected_delta_g_ev: float | None
+    correction_terms: tuple[CorrectionTerm, ...]
+    correction_total_eV: float
+    corrected_delta_g_ev: float | None
+    corrected_delta_g_kj_mol: float | None
+    missing_species: tuple[str, ...]
+    warnings: tuple[str, ...]
     notes: str | None = None
 
 
@@ -61,6 +83,112 @@ def load_che_pathway(path: Path) -> CHEPathway:
         reactions=reactions,
         notes=_optional_string(data, "notes", f"{pathway_path}: notes"),
     )
+
+
+def che_free_energy_table(
+    pathway: CHEPathway, results: list[CalculationResult]
+) -> list[CHEFreeEnergyRow]:
+    """Compute CHE-style corrected free energies from explicit species Gibbs values.
+
+    Sign convention for built-in bookkeeping terms:
+    - potential term: ``-n * U`` eV, where ``n`` is proton_electron_pairs and
+      ``U`` is potential_V versus the named reference;
+    - pH term: ``n * k_B * T * ln(10) * pH`` eV.
+
+    These terms are transparent bookkeeping only. Users remain responsible for
+    choosing references and deciding whether this convention fits their system.
+    """
+
+    gibbs_by_species = {
+        result.species_name: result.gibbs_free_energy_hartree for result in results
+    }
+    return [
+        _che_free_energy_row(reaction, gibbs_by_species)
+        for reaction in pathway.reactions
+    ]
+
+
+def _che_free_energy_row(
+    reaction: CHEReaction, gibbs_by_species: dict[str, float | None]
+) -> CHEFreeEnergyRow:
+    correction_terms = _che_correction_terms(reaction)
+    correction_total = sum(term.value_eV for term in correction_terms)
+    warnings = tuple(
+        warning for term in correction_terms for warning in term.warnings
+    )
+    missing_species = tuple(
+        species_name
+        for species_name in sorted(set(reaction.reactants) | set(reaction.products))
+        if gibbs_by_species.get(species_name) is None
+    )
+    if missing_species:
+        return CHEFreeEnergyRow(
+            reaction_id=reaction.id,
+            label=reaction.label,
+            complete=False,
+            uncorrected_delta_g_hartree=None,
+            uncorrected_delta_g_ev=None,
+            correction_terms=correction_terms,
+            correction_total_eV=correction_total,
+            corrected_delta_g_ev=None,
+            corrected_delta_g_kj_mol=None,
+            missing_species=missing_species,
+            warnings=warnings,
+            notes=reaction.notes,
+        )
+
+    delta_g_hartree = _stoichiometric_sum(reaction.products, gibbs_by_species) - (
+        _stoichiometric_sum(reaction.reactants, gibbs_by_species)
+    )
+    delta_g_ev = delta_g_hartree * HARTREE_TO_EV
+    corrected_delta_g_ev = delta_g_ev + correction_total
+    return CHEFreeEnergyRow(
+        reaction_id=reaction.id,
+        label=reaction.label,
+        complete=True,
+        uncorrected_delta_g_hartree=delta_g_hartree,
+        uncorrected_delta_g_ev=delta_g_ev,
+        correction_terms=correction_terms,
+        correction_total_eV=correction_total,
+        corrected_delta_g_ev=corrected_delta_g_ev,
+        corrected_delta_g_kj_mol=corrected_delta_g_ev * HARTREE_TO_KJ_MOL / HARTREE_TO_EV,
+        missing_species=(),
+        warnings=warnings,
+        notes=reaction.notes,
+    )
+
+
+def _che_correction_terms(reaction: CHEReaction) -> tuple[CorrectionTerm, ...]:
+    terms = list(reaction.correction_terms)
+    n_pairs = reaction.proton_electron_pairs
+    if n_pairs != 0 and reaction.potential_V is not None:
+        terms.append(
+            CorrectionTerm(
+                label="CHE potential correction",
+                value_eV=-n_pairs * reaction.potential_V,
+                sign_convention=(
+                    "-n * U eV, where n is proton_electron_pairs and U is "
+                    "potential_V versus potential_reference"
+                ),
+                source=f"CHE pathway potential versus {reaction.potential_reference}",
+            )
+        )
+    if n_pairs != 0 and reaction.pH is not None:
+        temperature = reaction.temperature_K or DEFAULT_CHE_TEMPERATURE_K
+        terms.append(
+            CorrectionTerm(
+                label="CHE pH correction",
+                value_eV=n_pairs * BOLTZMANN_EV_PER_K * temperature * LN_10 * reaction.pH,
+                sign_convention=(
+                    "n * k_B * T * ln(10) * pH eV, where n is "
+                    "proton_electron_pairs"
+                ),
+                source=(
+                    f"CHE pathway pH={reaction.pH:g}, temperature={temperature:g} K"
+                ),
+            )
+        )
+    return tuple(terms)
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:
@@ -217,3 +345,12 @@ def _number_or_error(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{label} must be a number")
     return float(value)
+
+
+def _stoichiometric_sum(
+    stoichiometry: dict[str, float], gibbs_by_species: dict[str, float | None]
+) -> float:
+    return sum(
+        coefficient * float(gibbs_by_species[species_name])
+        for species_name, coefficient in stoichiometry.items()
+    )

@@ -218,6 +218,24 @@ Implemented checks include:
 Checks are conservative. Warnings should make issues visible without rejecting
 usable data unless the calculation is clearly invalid.
 
+## CHE-Style Bookkeeping
+
+`qchem_workbench.analysis.che` supports transparent computational hydrogen
+electrode style bookkeeping from explicit species Gibbs free energies. It does
+not choose references, mechanisms, standard-state corrections, or catalyst
+models.
+
+Built-in correction sign conventions are:
+
+- potential correction: `-n * U` eV, where `n` is
+  `proton_electron_pairs` and `U` is `potential_V` versus the named reference;
+- pH correction: `n * k_B * T * ln(10) * pH` eV.
+
+Both terms are shown as individual correction terms. User-supplied correction
+terms must also remain visible with a label, value in eV, sign convention, and
+source or note. Users are responsible for choosing appropriate electrochemical
+references and deciding whether these conventions apply to a specific workflow.
+
 ## Adding New Backends
 
 To add a backend:
