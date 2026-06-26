@@ -50,11 +50,27 @@ from qchem_workbench.backends.qe_input import (
     validate_pseudopotentials_for_elements,
 )
 from qchem_workbench.backends.qe_parser import parse_qe_output
+from qchem_workbench.backends.registry import (
+    DEFAULT_BACKEND_REGISTRY,
+    BackendCapabilities,
+    BackendMetadata,
+    BackendRegistry,
+    BackendRegistryError,
+    built_in_backend_registry,
+    get_backend,
+    list_backends,
+    register_backend,
+)
 
 __all__ = [
     "ASEUnavailableError",
     "AdsorbatePlacementConfig",
     "Backend",
+    "BackendCapabilities",
+    "BackendMetadata",
+    "BackendRegistry",
+    "BackendRegistryError",
+    "DEFAULT_BACKEND_REGISTRY",
     "GAUSSIAN_TASK_PRESETS",
     "GaussianInputOptions",
     "MissingOptionalDependencyError",
@@ -69,8 +85,11 @@ __all__ = [
     "SUPPORTED_FCC_FACETS",
     "add_vacuum",
     "build_fcc_surface",
+    "built_in_backend_registry",
     "gaussian_route_from_spec",
+    "get_backend",
     "from_ase_atoms",
+    "list_backends",
     "load_adsorbate_placement_config",
     "orca_route_from_spec",
     "parse_gaussian_output",
@@ -83,6 +102,7 @@ __all__ = [
     "render_orca_input",
     "render_qe_pw_input",
     "repeat_slab_from_bulk",
+    "register_backend",
     "to_ase_atoms",
     "validate_pseudopotentials_for_elements",
     "write_structure",

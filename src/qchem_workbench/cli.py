@@ -70,6 +70,7 @@ from qchem_workbench.backends.qe_input import (
     render_qe_pw_input,
 )
 from qchem_workbench.backends.qe_parser import parse_qe_output
+from qchem_workbench.backends.registry import list_backends
 from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.geometry import read_xyz_frames, write_xyz_frames
 from qchem_workbench.core.registry import load_species_registry
@@ -128,6 +129,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_parser.add_argument("registry", type=Path)
     validate_parser.set_defaults(func=_validate_command)
+
+    backends_parser = subparsers.add_parser(
+        "backends", help="list registered backend capabilities"
+    )
+    backends_parser.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON"
+    )
+    backends_parser.set_defaults(func=_backends_command)
 
     inspect_structure_parser = subparsers.add_parser(
         "inspect-structure", help="inspect an atomistic structure file"
@@ -436,6 +445,27 @@ def _validate_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Validated {len(species)} species in {args.registry}.")
+    return 0
+
+
+def _backends_command(args: argparse.Namespace) -> int:
+    backends = list_backends()
+    if args.json:
+        print(json.dumps([backend.to_dict() for backend in backends], indent=2))
+        return 0
+
+    print(
+        "backend\tinput_rendering\toutput_parsing\texecution\tmolecular\tperiodic\tproperties"
+    )
+    for backend in backends:
+        capabilities = backend.capabilities
+        print(
+            f"{backend.name}\t{capabilities.input_rendering}\t"
+            f"{capabilities.output_parsing}\t{capabilities.execution}\t"
+            f"{capabilities.molecular_support}\t"
+            f"{capabilities.periodic_support}\t"
+            f"{';'.join(capabilities.properties_supported)}"
+        )
     return 0
 
 
