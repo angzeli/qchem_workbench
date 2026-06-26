@@ -6,6 +6,7 @@ from qchem_workbench.core.properties import (
     DipoleMoment,
     ElectronicExcitation,
     VibrationalMode,
+    wavelength_nm_from_ev,
 )
 from qchem_workbench.core.result import CalculationResult
 
@@ -96,3 +97,7 @@ def test_result_serialises_properties():
     restored = CalculationResult.from_dict(result.to_dict())
 
     assert restored.properties.vibrational_modes[0].frequency_cm1 == 3650.0
+
+
+def test_excitation_wavelength_conversion():
+    assert wavelength_nm_from_ev(2.0) == 619.9209921660013

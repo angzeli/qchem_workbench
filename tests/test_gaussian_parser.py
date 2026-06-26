@@ -274,6 +274,38 @@ def test_parse_gaussian_missing_intensities_remain_missing(tmp_path):
     assert result.properties.vibrational_modes[0].raman_activity_angstrom4_amu is None
 
 
+def test_parse_gaussian_excitation_fixture(tmp_path):
+    output_path = tmp_path / "td.log"
+    output_path.write_text(
+        " # td b3lyp/def2svp\n"
+        " Excited State   1:      Singlet-A      4.0000 eV  309.9605 nm  f=0.1234\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    excitation = result.properties.excitations[0]
+
+    assert excitation.energy_ev == 4.0
+    assert excitation.wavelength_nm == 309.9605
+    assert excitation.oscillator_strength == 0.1234
+    assert excitation.state_label == "Excited State 1: Singlet-A"
+
+
+def test_parse_gaussian_excitation_computes_missing_wavelength(tmp_path):
+    output_path = tmp_path / "td-computed-wavelength.log"
+    output_path.write_text(
+        " # td b3lyp/def2svp\n"
+        " Excited State   1:      Singlet-A      2.0000 eV  f=0.0100\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.properties.excitations[0].wavelength_nm == 619.9209921660013
+
+
 def test_parse_unrestricted_spin_info(tmp_path):
     output_path = tmp_path / "unrestricted.log"
     output_path.write_text(

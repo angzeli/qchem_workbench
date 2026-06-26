@@ -5,7 +5,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from qchem_workbench.core.properties import CalculationProperties, VibrationalMode
+from qchem_workbench.core.properties import (
+    CalculationProperties,
+    ElectronicExcitation,
+    VibrationalMode,
+    wavelength_nm_from_ev,
+)
 from qchem_workbench.core.result import CalculationResult
 
 
@@ -27,6 +32,11 @@ _ORCA_IR_VALUE_RE = re.compile(
 )
 _ORCA_RAMAN_VALUE_RE = re.compile(
     rf"\bRaman(?:\s+Activity)?\s*(?:=|:)?\s*({_NUMBER})", re.IGNORECASE
+)
+_ORCA_EXCITATION_RE = re.compile(
+    rf"^\s*STATE\s+(\d+)\s*:\s*(?:E\s*=\s*)?({_NUMBER})\s*eV"
+    rf"(?:\s+({_NUMBER})\s*nm)?(?:.*?\bf\s*=\s*({_NUMBER}))?",
+    re.IGNORECASE | re.MULTILINE,
 )
 _HOMO_EV_RE = re.compile(
     rf"\bHOMO(?:\s+ENERGY)?\s*(?::|=)?\s*({_NUMBER})\s*eV\b",
@@ -140,6 +150,7 @@ def parse_orca_output(path: Path) -> CalculationResult:
 
     thermochemistry = _extract_thermochemistry(text, warnings)
     vibrational_modes = _extract_vibrational_modes(text, warnings)
+    excitations = _extract_excitations(text)
     frequencies = [
         float(mode.frequency_cm1)
         for mode in vibrational_modes
@@ -194,7 +205,10 @@ def parse_orca_output(path: Path) -> CalculationResult:
         warnings=warnings,
         metadata=metadata,
         source_path=source_path,
-        properties=CalculationProperties(vibrational_modes=tuple(vibrational_modes)),
+        properties=CalculationProperties(
+            vibrational_modes=tuple(vibrational_modes),
+            excitations=tuple(excitations),
+        ),
     )
 
 
@@ -346,6 +360,30 @@ def _parse_float_tokens(tokens: list[str]) -> tuple[list[float], int]:
         except ValueError:
             malformed += 1
     return values, malformed
+
+
+def _extract_excitations(text: str) -> list[ElectronicExcitation]:
+    excitations: list[ElectronicExcitation] = []
+    for match in _ORCA_EXCITATION_RE.finditer(text):
+        state_index = match.group(1)
+        energy_ev = _parse_float(match.group(2))
+        wavelength_nm = (
+            _parse_float(match.group(3))
+            if match.group(3) is not None
+            else wavelength_nm_from_ev(energy_ev)
+        )
+        oscillator_strength = (
+            _parse_float(match.group(4)) if match.group(4) is not None else None
+        )
+        excitations.append(
+            ElectronicExcitation(
+                energy_ev=energy_ev,
+                wavelength_nm=wavelength_nm,
+                oscillator_strength=oscillator_strength,
+                state_label=f"STATE {state_index}",
+            )
+        )
+    return excitations
 
 
 def _extract_orbital_summary(

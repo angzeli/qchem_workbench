@@ -5,22 +5,33 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from qchem_workbench.core.properties import CalculationProperties, VibrationalMode
+from qchem_workbench.core.properties import (
+    CalculationProperties,
+    ElectronicExcitation,
+    VibrationalMode,
+    wavelength_nm_from_ev,
+)
 from qchem_workbench.core.result import CalculationResult
 
 
+_NUMBER = r"[-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?"
 _SCF_DONE_RE = re.compile(
-    r"SCF Done:\s+E\([^)]+\)\s+=\s+([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)"
+    rf"SCF Done:\s+E\([^)]+\)\s+=\s+({_NUMBER})"
 )
 _ROUTE_START_RE = re.compile(r"^\s*#")
 _FREQUENCIES_RE = re.compile(r"Frequencies\s+--\s+(.+)")
 _IR_INTENSITIES_RE = re.compile(r"IR\s+Inten\s+--\s+(.+)", re.IGNORECASE)
 _RAMAN_ACTIVITIES_RE = re.compile(r"Raman\s+Activ\s+--\s+(.+)", re.IGNORECASE)
+_EXCITED_STATE_RE = re.compile(
+    rf"Excited\s+State\s+(\d+):\s+(.+?)\s+({_NUMBER})\s+eV"
+    rf"(?:\s+({_NUMBER})\s+nm)?(?:.*?\bf\s*=\s*({_NUMBER}))?",
+    re.IGNORECASE,
+)
 _SPIN_LINE_RE = re.compile(r"S\*\*2\s+before\s+annihilation", re.IGNORECASE)
 _SPIN_VALUES_RE = re.compile(
     r"S\*\*2\s+before\s+annihilation\s+"
-    r"([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?),?\s+after\s+"
-    r"([-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?)",
+    rf"({_NUMBER}),?\s+after\s+"
+    rf"({_NUMBER})",
     re.IGNORECASE,
 )
 _THERMOCHEMISTRY_PATTERNS = {
@@ -90,6 +101,7 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
 
     thermochemistry = _extract_thermochemistry(text, warnings)
     vibrational_modes = _extract_vibrational_modes(text, warnings)
+    excitations = _extract_excitations(text)
     frequencies = [
         float(mode.frequency_cm1)
         for mode in vibrational_modes
@@ -148,7 +160,10 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
         warnings=warnings,
         metadata=metadata,
         source_path=source_path,
-        properties=CalculationProperties(vibrational_modes=tuple(vibrational_modes)),
+        properties=CalculationProperties(
+            vibrational_modes=tuple(vibrational_modes),
+            excitations=tuple(excitations),
+        ),
     )
 
 
@@ -293,6 +308,31 @@ def _parse_float_tokens(tokens: list[str]) -> tuple[list[float], int]:
         except ValueError:
             malformed += 1
     return values, malformed
+
+
+def _extract_excitations(text: str) -> list[ElectronicExcitation]:
+    excitations: list[ElectronicExcitation] = []
+    for match in _EXCITED_STATE_RE.finditer(text):
+        state_index = match.group(1)
+        state_label = match.group(2).strip()
+        energy_ev = _parse_float(match.group(3))
+        wavelength_nm = (
+            _parse_float(match.group(4))
+            if match.group(4) is not None
+            else wavelength_nm_from_ev(energy_ev)
+        )
+        oscillator_strength = (
+            _parse_float(match.group(5)) if match.group(5) is not None else None
+        )
+        excitations.append(
+            ElectronicExcitation(
+                energy_ev=energy_ev,
+                wavelength_nm=wavelength_nm,
+                oscillator_strength=oscillator_strength,
+                state_label=f"Excited State {state_index}: {state_label}",
+            )
+        )
+    return excitations
 
 
 def _extract_spin_metadata(text: str, warnings: list[str]) -> dict[str, float]:

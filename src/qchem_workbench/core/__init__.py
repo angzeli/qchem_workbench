@@ -20,8 +20,10 @@ from qchem_workbench.core.properties import (
     AtomicCharge,
     CalculationProperties,
     DipoleMoment,
+    EV_NM_PRODUCT,
     ElectronicExcitation,
     VibrationalMode,
+    wavelength_nm_from_ev,
 )
 from qchem_workbench.core.registry import SUPPORTED_SCHEMA_VERSION, load_species_registry
 from qchem_workbench.core.result import CalculationResult
@@ -37,6 +39,7 @@ __all__ = [
     "CalculationResult",
     "CalculationSpec",
     "DipoleMoment",
+    "EV_NM_PRODUCT",
     "ElectronicExcitation",
     "HARTREE_TO_EV",
     "MoleculeGeometry",
@@ -57,4 +60,5 @@ __all__ = [
     "rmsd",
     "translate_geometry",
     "write_xyz_frames",
+    "wavelength_nm_from_ev",
 ]

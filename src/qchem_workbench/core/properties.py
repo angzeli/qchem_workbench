@@ -6,6 +6,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+EV_NM_PRODUCT = 1239.8419843320026
+
+
+def wavelength_nm_from_ev(energy_ev: float) -> float:
+    if energy_ev <= 0.0:
+        raise ValueError("energy_ev must be positive")
+    return EV_NM_PRODUCT / energy_ev
+
+
 @dataclass(frozen=True)
 class VibrationalMode:
     frequency_cm1: float | None
