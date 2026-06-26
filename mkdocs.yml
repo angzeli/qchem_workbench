@@ -1,0 +1,20 @@
+site_name: qchem-workbench
+site_description: Backend-agnostic quantum-chemistry workflow manager.
+docs_dir: docs
+nav:
+  - Overview: index.md
+  - Installation: installation.md
+  - Quickstart: quickstart.md
+  - Species Registry: species_registry.md
+  - Backend Adapters: backend_adapters.md
+  - Parsers: parsers.md
+  - Analysis Workflows: analysis_workflows.md
+  - Campaign Workflows: campaign_workflows.md
+  - Electrochemistry: electrochemistry.md
+  - Scientific Caveats: scientific_caveats.md
+  - Developer Guide: developer_guide.md
+  - CI: ci.md
+  - Release Checklist: release_checklist.md
+theme:
+  name: readthedocs
+strict: true

@@ -30,3 +30,9 @@ Run ASE-specific checks when ASE is installed:
 ```bash
 python -m pytest tests/test_ase_adapter.py tests/test_ase_surface.py tests/test_ase_adsorption.py
 ```
+
+Build the documentation site when the docs extra is installed:
+
+```bash
+python -m mkdocs build --strict
+```

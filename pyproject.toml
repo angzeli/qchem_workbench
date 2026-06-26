@@ -26,6 +26,9 @@ dev = [
   "pytest",
   "ruff",
 ]
+docs = [
+  "mkdocs>=1.5",
+]
 pyscf = [
   "pyscf>=2",
 ]

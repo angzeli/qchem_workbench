@@ -14,9 +14,13 @@ backend integrations:
 - `qchem_workbench.backends`: backend protocol plus PySCF, Gaussian input,
   Gaussian parser, Gaussian scheduler-template helpers, ORCA input, and ORCA
   parser helpers, QE `pw.x` input/parser helpers, plus optional ASE adapters and
-  slab helpers.
-- `qchem_workbench.analysis`: quality checks, result/species matching, and
-  stoichiometric reaction-energy bookkeeping.
+  slab helpers. Backend capabilities are described by the typed backend
+  registry.
+- `qchem_workbench.analysis`: quality checks, result/species matching,
+  stoichiometric reaction-energy bookkeeping, adsorption/CHE bookkeeping,
+  screening descriptors, transparent ranking, and active-learning handoff
+  tables.
+- `qchem_workbench.campaigns`: optional screening campaign manifest loading.
 - `qchem_workbench.results`: JSON result-store helpers.
 - `qchem_workbench.reports`: Markdown reports, exports, plotting, and triage.
 - `qchem_workbench.projects`: optional project manifest loading.
@@ -34,6 +38,7 @@ package-level `__all__` values in:
 - `qchem_workbench.core`
 - `qchem_workbench.analysis`
 - `qchem_workbench.backends`
+- `qchem_workbench.campaigns`
 - `qchem_workbench.projects`
 - `qchem_workbench.reports`
 - `qchem_workbench.results`
@@ -82,6 +87,12 @@ def run(species: Species, spec: CalculationSpec) -> CalculationResult:
 The backend returns a `CalculationResult`. Missing values should remain `None`,
 and warnings should explain missing or questionable parsed fields. Backends
 should not invent data or silently accept failed calculations.
+
+Backend capability metadata is registered through
+`qchem_workbench.backends.registry`. The registry records support for input
+rendering, output parsing, execution, molecular structures, periodic structures,
+and parsed property families. It is descriptive metadata for workflow discovery;
+it does not guarantee that a particular output file contains every property.
 
 ## Result Schema
 
