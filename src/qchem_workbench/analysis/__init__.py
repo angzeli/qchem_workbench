@@ -1,5 +1,12 @@
 """Analysis and quality-check utilities."""
 
+from qchem_workbench.analysis.adsorption import (
+    ADSORPTION_SCHEMA_VERSION,
+    AdsorptionCalculationRef,
+    AdsorptionSystem,
+    AdsorptionWorkflow,
+    load_adsorption_workflow,
+)
 from qchem_workbench.analysis.conformers import (
     ConformerSelection,
     ConformerSelectionReport,
@@ -25,6 +32,10 @@ from qchem_workbench.analysis.result_matching import (
 )
 
 __all__ = [
+    "ADSORPTION_SCHEMA_VERSION",
+    "AdsorptionCalculationRef",
+    "AdsorptionSystem",
+    "AdsorptionWorkflow",
     "AmbiguousSpeciesMatch",
     "ConformerSelection",
     "ConformerSelectionReport",
@@ -38,6 +49,7 @@ __all__ = [
     "ResultMatchReport",
     "SpeciesResultMatch",
     "load_pathway",
+    "load_adsorption_workflow",
     "match_results_to_species",
     "reaction_electronic_energy_table",
     "reaction_gibbs_free_energy_table",
