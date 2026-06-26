@@ -42,6 +42,7 @@ from qchem_workbench.backends.qe_input import (
     render_qe_pw_input,
     validate_pseudopotentials_for_elements,
 )
+from qchem_workbench.backends.qe_parser import parse_qe_output
 
 __all__ = [
     "ASEUnavailableError",
@@ -64,6 +65,7 @@ __all__ = [
     "orca_route_from_spec",
     "parse_gaussian_output",
     "parse_orca_output",
+    "parse_qe_output",
     "render_gaussian_input",
     "render_gaussian_scheduler_script",
     "render_orca_input",
