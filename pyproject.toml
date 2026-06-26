@@ -26,6 +26,9 @@ dev = [
 pyscf = [
   "pyscf>=2",
 ]
+rdkit = [
+  "rdkit>=2023.9",
+]
 
 [project.scripts]
 qchemwb = "qchem_workbench.cli:main"
