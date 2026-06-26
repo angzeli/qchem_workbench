@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
+
+import pytest
 
 from qchem_workbench.backends.gaussian_parser import parse_gaussian_output
 from qchem_workbench.backends.orca_parser import parse_orca_output
@@ -95,6 +98,74 @@ def test_validate_failure(tmp_path, capsys):
     captured = capsys.readouterr()
     assert exit_code == 1
     assert "unsupported schema_version" in captured.err
+
+
+def test_inspect_structure_xyz(tmp_path, capsys):
+    xyz_path = tmp_path / "water.xyz"
+    xyz_path.write_text(
+        "3\n"
+        "synthetic fixture water geometry\n"
+        "O 0 0 0\n"
+        "H 0 0 1\n"
+        "H 0 1 0\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["inspect-structure", str(xyz_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "atoms\t3" in captured.out
+    assert "formula\tH2O" in captured.out
+    assert "periodic\tFalse" in captured.out
+
+
+def test_convert_structure_xyz_to_xyz(tmp_path):
+    input_path = tmp_path / "input.xyz"
+    output_path = tmp_path / "output.xyz"
+    input_path.write_text(
+        "1\nsynthetic fixture hydrogen geometry\nH 0 0 0\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["convert-structure", str(input_path), str(output_path)])
+
+    assert exit_code == 0
+    assert output_path.read_text(encoding="utf-8") == (
+        "1\nsynthetic fixture hydrogen geometry\nH 0 0 0\n"
+    )
+
+
+def test_convert_structure_ase_format_reports_missing_ase(tmp_path, capsys):
+    if importlib.util.find_spec("ase") is not None:
+        pytest.skip("ASE is installed; missing-ASE error path is not applicable")
+    input_path = tmp_path / "input.xyz"
+    output_path = tmp_path / "output.traj"
+    input_path.write_text(
+        "1\nsynthetic fixture hydrogen geometry\nH 0 0 0\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["convert-structure", str(input_path), str(output_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "ASE is required" in captured.err
+
+
+def test_convert_structure_ase_only_format_when_available(tmp_path):
+    pytest.importorskip("ase")
+    input_path = tmp_path / "input.xyz"
+    output_path = tmp_path / "output.traj"
+    input_path.write_text(
+        "1\nsynthetic fixture hydrogen geometry\nH 0 0 0\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["convert-structure", str(input_path), str(output_path)])
+
+    assert exit_code == 0
+    assert output_path.exists()
 
 
 def test_init_refuses_to_overwrite_without_force(tmp_path):

@@ -17,6 +17,7 @@ from qchem_workbench.analysis.reactions import load_pathway
 from qchem_workbench.analysis.reactions import reaction_electronic_energy_table
 from qchem_workbench.analysis.reactions import reaction_gibbs_free_energy_table
 from qchem_workbench.analysis.result_matching import match_results_to_species
+from qchem_workbench.backends.ase_adapter import ASEUnavailableError, from_ase_atoms
 from qchem_workbench.backends.gaussian_input import (
     GAUSSIAN_TASK_PRESETS,
     GaussianInputOptions,
@@ -39,9 +40,11 @@ from qchem_workbench.backends.pyscf_backend import (
     PySCFBackend,
 )
 from qchem_workbench.core.calculation import CalculationSpec
+from qchem_workbench.core.geometry import read_xyz_frames, write_xyz_frames
 from qchem_workbench.core.registry import load_species_registry
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
+from qchem_workbench.core.structure import AtomisticStructure
 from qchem_workbench.projects.manifest import ProjectManifest, load_project_manifest
 from qchem_workbench.reports.markdown import write_markdown_report
 from qchem_workbench.reports.plotting import plot_pathway_from_csv
@@ -92,6 +95,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_parser.add_argument("registry", type=Path)
     validate_parser.set_defaults(func=_validate_command)
+
+    inspect_structure_parser = subparsers.add_parser(
+        "inspect-structure", help="inspect an atomistic structure file"
+    )
+    inspect_structure_parser.add_argument("path", type=Path)
+    inspect_structure_parser.set_defaults(func=_inspect_structure_command)
+
+    convert_structure_parser = subparsers.add_parser(
+        "convert-structure", help="convert atomistic structure files"
+    )
+    convert_structure_parser.add_argument("input", type=Path)
+    convert_structure_parser.add_argument("output", type=Path)
+    convert_structure_parser.set_defaults(func=_convert_structure_command)
 
     run_pyscf_parser = subparsers.add_parser(
         "run-pyscf", help="run PySCF single-point calculations"
@@ -276,6 +292,38 @@ def _validate_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Validated {len(species)} species in {args.registry}.")
+    return 0
+
+
+def _inspect_structure_command(args: argparse.Namespace) -> int:
+    try:
+        structures = _read_structure_file(args.path)
+    except (OSError, ValueError, ASEUnavailableError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    first = structures[0]
+    print(f"path\t{args.path}")
+    print(f"frames\t{len(structures)}")
+    print(f"atoms\t{len(first.atoms)}")
+    print(f"formula\t{_formula_from_atoms(first.atoms)}")
+    print(f"periodic\t{first.is_periodic}")
+    print(f"pbc\t{' '.join(str(flag) for flag in first.pbc)}")
+    if first.cell is not None:
+        print(f"cell\t{json.dumps(first.cell)}")
+    else:
+        print("cell\t")
+    return 0
+
+
+def _convert_structure_command(args: argparse.Namespace) -> int:
+    try:
+        _convert_structure_file(args.input, args.output)
+    except (OSError, ValueError, ASEUnavailableError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Converted {args.input} to {args.output}.")
     return 0
 
 
@@ -588,6 +636,73 @@ def _initialize_project(path: Path, template: str, force: bool) -> None:
         destination = target / relative_path
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text(content, encoding="utf-8")
+
+
+def _read_structure_file(path: Path) -> list[AtomisticStructure]:
+    structure_path = Path(path)
+    if _is_xyz_path(structure_path):
+        return [
+            AtomisticStructure.from_molecule_geometry(frame)
+            for frame in read_xyz_frames(structure_path)
+        ]
+
+    ase_io = _load_ase_io()
+    frames = ase_io.read(str(structure_path), index=":")
+    if not isinstance(frames, list):
+        frames = [frames]
+    return [from_ase_atoms(frame) for frame in frames]
+
+
+def _convert_structure_file(input_path: Path, output_path: Path) -> None:
+    source = Path(input_path)
+    target = Path(output_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if _is_xyz_path(source) and _is_xyz_path(target):
+        write_xyz_frames(read_xyz_frames(source), target)
+        return
+
+    ase_io = _load_ase_io()
+    frames = ase_io.read(str(source), index=":")
+    if not isinstance(frames, list):
+        frames = [frames]
+    ase_io.write(str(target), frames if len(frames) != 1 else frames[0])
+
+
+def _is_xyz_path(path: Path) -> bool:
+    return Path(path).suffix.lower() == ".xyz"
+
+
+def _load_ase_io():
+    try:
+        import ase.io
+    except ImportError as exc:
+        raise ASEUnavailableError(
+            "ASE is required for this structure format; install the optional "
+            "dependency with qchem-workbench[ase]."
+        ) from exc
+    return ase.io
+
+
+def _formula_from_atoms(atoms) -> str:
+    counts: dict[str, int] = {}
+    for atom in atoms:
+        counts[atom.symbol] = counts.get(atom.symbol, 0) + 1
+
+    if "C" in counts:
+        symbols = ["C"]
+        if "H" in counts:
+            symbols.append("H")
+        symbols.extend(
+            symbol for symbol in sorted(counts) if symbol not in {"C", "H"}
+        )
+    else:
+        symbols = sorted(counts)
+
+    return "".join(
+        symbol if counts[symbol] == 1 else f"{symbol}{counts[symbol]}"
+        for symbol in symbols
+    )
 
 
 def _run_project_render_gaussian(
