@@ -5,6 +5,14 @@ from qchem_workbench.backends.ase_adapter import (
     from_ase_atoms,
     to_ase_atoms,
 )
+from qchem_workbench.backends.ase_surface import (
+    STARTING_STRUCTURE_WARNING,
+    SUPPORTED_FCC_FACETS,
+    add_vacuum,
+    build_fcc_surface,
+    repeat_slab_from_bulk,
+    write_structure,
+)
 from qchem_workbench.backends.base import Backend
 from qchem_workbench.backends.gaussian_input import (
     GAUSSIAN_TASK_PRESETS,
@@ -39,6 +47,10 @@ __all__ = [
     "ORCA_TASK_PRESETS",
     "PySCFBackend",
     "SCHEDULER_NAMES",
+    "STARTING_STRUCTURE_WARNING",
+    "SUPPORTED_FCC_FACETS",
+    "add_vacuum",
+    "build_fcc_surface",
     "gaussian_route_from_spec",
     "from_ase_atoms",
     "orca_route_from_spec",
@@ -47,5 +59,7 @@ __all__ = [
     "render_gaussian_input",
     "render_gaussian_scheduler_script",
     "render_orca_input",
+    "repeat_slab_from_bulk",
     "to_ase_atoms",
+    "write_structure",
 ]

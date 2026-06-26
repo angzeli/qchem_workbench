@@ -168,6 +168,35 @@ def test_convert_structure_ase_only_format_when_available(tmp_path):
     assert output_path.exists()
 
 
+def test_build_slab_cli_when_ase_available(tmp_path, capsys):
+    pytest.importorskip("ase")
+    out_path = tmp_path / "slabs" / "cu111.xyz"
+
+    exit_code = main(
+        [
+            "build-slab",
+            "--element",
+            "Cu",
+            "--facet",
+            "111",
+            "--size",
+            "2",
+            "2",
+            "4",
+            "--vacuum",
+            "15",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert out_path.exists()
+    assert "atoms\t16" in captured.out
+    assert "not relaxed" in captured.out
+
+
 def test_init_refuses_to_overwrite_without_force(tmp_path):
     project_path = tmp_path / "demo"
     assert main(["init", str(project_path), "--template", "blank"]) == 0

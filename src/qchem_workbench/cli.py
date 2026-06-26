@@ -18,6 +18,11 @@ from qchem_workbench.analysis.reactions import reaction_electronic_energy_table
 from qchem_workbench.analysis.reactions import reaction_gibbs_free_energy_table
 from qchem_workbench.analysis.result_matching import match_results_to_species
 from qchem_workbench.backends.ase_adapter import ASEUnavailableError, from_ase_atoms
+from qchem_workbench.backends.ase_surface import (
+    SUPPORTED_FCC_FACETS,
+    build_fcc_surface,
+    write_structure,
+)
 from qchem_workbench.backends.gaussian_input import (
     GAUSSIAN_TASK_PRESETS,
     GaussianInputOptions,
@@ -108,6 +113,18 @@ def build_parser() -> argparse.ArgumentParser:
     convert_structure_parser.add_argument("input", type=Path)
     convert_structure_parser.add_argument("output", type=Path)
     convert_structure_parser.set_defaults(func=_convert_structure_command)
+
+    build_slab_parser = subparsers.add_parser(
+        "build-slab", help="build an unrelaxed starting slab with optional ASE"
+    )
+    build_slab_parser.add_argument("--element", required=True)
+    build_slab_parser.add_argument(
+        "--facet", required=True, choices=SUPPORTED_FCC_FACETS
+    )
+    build_slab_parser.add_argument("--size", nargs=3, required=True, type=int)
+    build_slab_parser.add_argument("--vacuum", required=True, type=float)
+    build_slab_parser.add_argument("--out", required=True, type=Path)
+    build_slab_parser.set_defaults(func=_build_slab_command)
 
     run_pyscf_parser = subparsers.add_parser(
         "run-pyscf", help="run PySCF single-point calculations"
@@ -324,6 +341,25 @@ def _convert_structure_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Converted {args.input} to {args.output}.")
+    return 0
+
+
+def _build_slab_command(args: argparse.Namespace) -> int:
+    try:
+        structure = build_fcc_surface(
+            element=args.element,
+            facet=args.facet,
+            size=tuple(args.size),
+            vacuum=args.vacuum,
+        )
+        write_structure(structure, args.out)
+    except (OSError, ValueError, ASEUnavailableError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote starting slab to {args.out}.")
+    print(f"atoms\t{len(structure.atoms)}")
+    print(f"warning\t{structure.metadata['warning']}")
     return 0
 
 
