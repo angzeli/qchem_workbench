@@ -468,6 +468,141 @@ def test_render_gaussian_scheduler_requires_job_folders(tmp_path):
     assert exit_code == 1
 
 
+def test_render_orca_generates_files(tmp_path, capsys):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "orca_inputs"
+
+    exit_code = main(
+        [
+            "render-orca",
+            str(project_path / "species.yaml"),
+            "--method",
+            "b3lyp",
+            "--basis",
+            "def2-svp",
+            "--task",
+            "single_point",
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    water_input = (out_dir / "water.inp").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert (out_dir / "carbon_dioxide.inp").exists()
+    assert "! b3lyp def2-svp SP" in water_input
+    assert "\n* xyz 0 1\n" in water_input
+    assert "water\t" in captured.out
+
+
+def test_render_orca_job_folder_layout(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "orca_inputs"
+
+    exit_code = main(
+        [
+            "render-orca",
+            str(project_path / "species.yaml"),
+            "--method",
+            "b3lyp",
+            "--basis",
+            "def2-svp",
+            "--task",
+            "opt_freq",
+            "--out",
+            str(out_dir),
+            "--job-folders",
+        ]
+    )
+
+    water_input = (out_dir / "water" / "water.inp").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "! b3lyp def2-svp Opt Freq" in water_input
+    assert (out_dir / "carbon_dioxide" / "carbon_dioxide.inp").exists()
+
+
+def test_render_orca_refuses_to_overwrite_without_force(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "orca_inputs"
+    out_dir.mkdir()
+    water_path = out_dir / "water.inp"
+    water_path.write_text("sentinel\n", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "render-orca",
+            str(project_path / "species.yaml"),
+            "--method",
+            "b3lyp",
+            "--basis",
+            "def2-svp",
+            "--task",
+            "single_point",
+            "--out",
+            str(out_dir),
+        ]
+    )
+
+    assert exit_code == 1
+    assert water_path.read_text(encoding="utf-8") == "sentinel\n"
+
+
+def test_render_orca_run_script_generation(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+    out_dir = project_path / "orca_inputs"
+
+    exit_code = main(
+        [
+            "render-orca",
+            str(project_path / "species.yaml"),
+            "--method",
+            "b3lyp",
+            "--basis",
+            "def2-svp",
+            "--task",
+            "single_point",
+            "--out",
+            str(out_dir),
+            "--job-folders",
+            "--include-run-script",
+        ]
+    )
+
+    script = (out_dir / "water" / "run_orca.sh").read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "Template only" in script
+    assert 'ORCA_CMD="${ORCA_CMD:-orca}"' in script
+    assert '"$ORCA_CMD" "water.inp" > "water.out"' in script
+
+
+def test_render_orca_run_script_requires_job_folders(tmp_path):
+    project_path = tmp_path / "demo"
+    assert main(["init", str(project_path), "--template", "basic"]) == 0
+
+    exit_code = main(
+        [
+            "render-orca",
+            str(project_path / "species.yaml"),
+            "--method",
+            "b3lyp",
+            "--basis",
+            "def2-svp",
+            "--task",
+            "single_point",
+            "--out",
+            str(project_path / "orca_inputs"),
+            "--include-run-script",
+        ]
+    )
+
+    assert exit_code == 1
+
+
 def test_parse_gaussian_scans_recursively_and_writes_json(tmp_path):
     outputs = tmp_path / "outputs"
     nested = outputs / "nested"

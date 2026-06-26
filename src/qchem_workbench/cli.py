@@ -27,6 +27,11 @@ from qchem_workbench.backends.gaussian_scheduler import (
     SCHEDULER_NAMES,
     render_gaussian_scheduler_script,
 )
+from qchem_workbench.backends.orca_input import (
+    ORCA_TASK_PRESETS,
+    ORCAInputOptions,
+    render_orca_input,
+)
 from qchem_workbench.backends.pyscf_backend import (
     MissingOptionalDependencyError,
     PySCFBackend,
@@ -131,6 +136,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="include a scheduler script template; requires --job-folders",
     )
     render_gaussian_parser.set_defaults(func=_render_gaussian_command)
+
+    render_orca_parser = subparsers.add_parser(
+        "render-orca", help="render ORCA input files without running ORCA"
+    )
+    render_orca_parser.add_argument("registry", type=Path)
+    render_orca_parser.add_argument("--method", required=True)
+    render_orca_parser.add_argument("--basis", required=True)
+    render_orca_parser.add_argument(
+        "--task", required=True, choices=tuple(ORCA_TASK_PRESETS)
+    )
+    render_orca_parser.add_argument("--out", required=True, type=Path)
+    render_orca_parser.add_argument(
+        "--force", action="store_true", help="overwrite existing .inp files"
+    )
+    render_orca_parser.add_argument(
+        "--job-folders",
+        action="store_true",
+        help="create one folder per species and place input files inside it",
+    )
+    render_orca_parser.add_argument(
+        "--include-run-script",
+        action="store_true",
+        help="include a simple ORCA run script template in each job folder",
+    )
+    render_orca_parser.set_defaults(func=_render_orca_command)
 
     parse_gaussian_parser = subparsers.add_parser(
         "parse-gaussian", help="parse Gaussian .log and .out files"
@@ -274,6 +304,33 @@ def _render_gaussian_command(args: argparse.Namespace) -> int:
             job_folders=args.job_folders,
             include_run_script=args.include_run_script,
             scheduler=args.scheduler,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("species\tfile")
+    for species_name, path in generated:
+        print(f"{species_name}\t{path}")
+    return 0
+
+
+def _render_orca_command(args: argparse.Namespace) -> int:
+    try:
+        species_list = load_species_registry(args.registry)
+        spec = CalculationSpec(
+            backend="orca",
+            method=args.method,
+            basis=args.basis,
+            task=args.task,
+        )
+        generated = _render_orca_files(
+            species_list=species_list,
+            spec=spec,
+            out_dir=args.out,
+            force=args.force,
+            job_folders=args.job_folders,
+            include_run_script=args.include_run_script,
         )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -730,6 +787,90 @@ def _gaussian_run_script(input_filename: str) -> str:
         "\n"
         'GAUSSIAN_CMD="${GAUSSIAN_CMD:-g16}"\n'
         f'"$GAUSSIAN_CMD" < "{input_filename}" > "{output_filename}"\n'
+    )
+
+
+def _render_orca_files(
+    species_list: list[Species],
+    spec: CalculationSpec,
+    out_dir: Path,
+    force: bool,
+    job_folders: bool = False,
+    include_run_script: bool = False,
+) -> list[tuple[str, Path]]:
+    if include_run_script and not job_folders:
+        raise ValueError("--include-run-script requires --job-folders")
+
+    output_dir = Path(out_dir)
+    jobs = [
+        _orca_job_paths(output_dir, species.name, job_folders, include_run_script)
+        for species in species_list
+    ]
+    input_paths = [job["input_path"] for job in jobs]
+    if len(set(input_paths)) != len(input_paths):
+        raise ValueError("species names produce duplicate ORCA input filenames")
+
+    conflict_paths = [
+        job[key]
+        for job in jobs
+        for key in ("input_path", "run_script_path")
+        if job[key] is not None
+    ]
+    conflicts = [path for path in conflict_paths if path.exists()]
+    if conflicts and not force:
+        conflict_list = ", ".join(str(path) for path in conflicts)
+        raise ValueError(f"refusing to overwrite existing file(s): {conflict_list}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    generated: list[tuple[str, Path]] = []
+    for species, job in zip(species_list, jobs):
+        path = job["input_path"]
+        content = render_orca_input(
+            species,
+            spec,
+            ORCAInputOptions(title=f"{species.name} {spec.task} ORCA input"),
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        if job["run_script_path"] is not None:
+            job["run_script_path"].write_text(
+                _orca_run_script(path.name),
+                encoding="utf-8",
+            )
+        generated.append((species.name, path))
+    return generated
+
+
+def _orca_job_paths(
+    output_dir: Path,
+    species_name: str,
+    job_folders: bool,
+    include_run_script: bool,
+) -> dict[str, Path | None]:
+    safe_name = _safe_filename(species_name)
+    if job_folders:
+        job_dir = output_dir / safe_name
+        return {
+            "input_path": job_dir / f"{safe_name}.inp",
+            "run_script_path": job_dir / "run_orca.sh"
+            if include_run_script
+            else None,
+        }
+    return {
+        "input_path": output_dir / f"{safe_name}.inp",
+        "run_script_path": None,
+    }
+
+
+def _orca_run_script(input_filename: str) -> str:
+    output_filename = f"{Path(input_filename).stem}.out"
+    return (
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "\n"
+        "# Template only; adapt ORCA_CMD for the local ORCA installation.\n"
+        'ORCA_CMD="${ORCA_CMD:-orca}"\n'
+        f'"$ORCA_CMD" "{input_filename}" > "{output_filename}"\n'
     )
 
 
