@@ -39,6 +39,7 @@ from qchem_workbench.backends.pyscf_backend import (
 from qchem_workbench.backends.qe_input import (
     QEKPoints,
     QEInputSpec,
+    render_qe_pw_input,
     validate_pseudopotentials_for_elements,
 )
 
@@ -66,6 +67,7 @@ __all__ = [
     "render_gaussian_input",
     "render_gaussian_scheduler_script",
     "render_orca_input",
+    "render_qe_pw_input",
     "repeat_slab_from_bulk",
     "to_ase_atoms",
     "validate_pseudopotentials_for_elements",

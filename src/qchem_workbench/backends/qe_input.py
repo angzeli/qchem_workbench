@@ -5,9 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from qchem_workbench.core.structure import AtomisticStructure
+
 
 QENamelistSettings = dict[str, dict[str, Any]]
 QEKPointMode = Literal["automatic", "gamma"]
+QE_CELL_CALCULATIONS = {"vc-relax", "vc-md"}
+QE_IONS_CALCULATIONS = {"relax", "md", "vc-relax", "vc-md"}
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,7 @@ class QEInputSpec:
     degauss: float | None = None
     k_points: QEKPoints = field(default_factory=QEKPoints)
     pseudopotentials: dict[str, str] = field(default_factory=dict)
+    atomic_masses: dict[str, float] = field(default_factory=dict)
     additional_settings: QENamelistSettings = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -77,11 +82,37 @@ class QEInputSpec:
             "pseudopotentials",
             _pseudopotentials(self.pseudopotentials),
         )
+        object.__setattr__(self, "atomic_masses", _atomic_masses(self.atomic_masses))
         object.__setattr__(
             self,
             "additional_settings",
             _additional_settings(self.additional_settings),
         )
+
+
+def render_qe_pw_input(structure: AtomisticStructure, spec: QEInputSpec) -> str:
+    elements = {atom.symbol for atom in structure.atoms}
+    validate_pseudopotentials_for_elements(elements, spec.pseudopotentials)
+    _validate_atomic_masses_for_elements(elements, spec.atomic_masses)
+    if structure.cell is None:
+        raise ValueError("QE pw.x input rendering requires explicit cell vectors")
+
+    namelists = _qe_namelists(structure, spec)
+    lines: list[str] = []
+    for name in ("control", "system", "electrons", "ions", "cell"):
+        if name in namelists:
+            settings = namelists[name]
+            lines.extend(_render_namelist(name, settings))
+            lines.append("")
+
+    lines.extend(_atomic_species_lines(elements, spec))
+    lines.append("")
+    lines.extend(_atomic_positions_lines(structure))
+    lines.append("")
+    lines.extend(_cell_parameter_lines(structure))
+    lines.append("")
+    lines.extend(spec.k_points.to_lines())
+    return "\n".join(lines) + "\n"
 
 
 def validate_pseudopotentials_for_elements(
@@ -95,12 +126,123 @@ def validate_pseudopotentials_for_elements(
         )
 
 
+def _validate_atomic_masses_for_elements(
+    elements: set[str], atomic_masses: dict[str, float]
+) -> None:
+    missing = sorted(elements - set(atomic_masses))
+    if missing:
+        raise ValueError(
+            "QE atomic mass mapping is missing element(s): " + ", ".join(missing)
+        )
+
+
+def _qe_namelists(
+    structure: AtomisticStructure, spec: QEInputSpec
+) -> dict[str, dict[str, Any]]:
+    elements = sorted({atom.symbol for atom in structure.atoms})
+    namelists: dict[str, dict[str, Any]] = {
+        "control": {
+            "calculation": spec.calculation,
+            "prefix": spec.prefix,
+            "pseudo_dir": spec.pseudo_dir,
+            "outdir": spec.outdir,
+        },
+        "system": {
+            "ibrav": 0,
+            "nat": len(structure.atoms),
+            "ntyp": len(elements),
+            "ecutwfc": spec.ecutwfc,
+        },
+        "electrons": {},
+    }
+    if spec.ecutrho is not None:
+        namelists["system"]["ecutrho"] = spec.ecutrho
+    if spec.occupations is not None:
+        namelists["system"]["occupations"] = spec.occupations
+    if spec.smearing is not None:
+        namelists["system"]["smearing"] = spec.smearing
+    if spec.degauss is not None:
+        namelists["system"]["degauss"] = spec.degauss
+    if spec.calculation in QE_IONS_CALCULATIONS:
+        namelists["ions"] = {}
+    if spec.calculation in QE_CELL_CALCULATIONS:
+        namelists["cell"] = {}
+
+    for name, settings in spec.additional_settings.items():
+        namelists.setdefault(name, {}).update(settings)
+    return namelists
+
+
+def _render_namelist(name: str, settings: dict[str, Any]) -> list[str]:
+    lines = [f"&{name.upper()}"]
+    for key, value in settings.items():
+        lines.append(f"  {key} = {_format_qe_value(value)},")
+    lines.append("/")
+    return lines
+
+
+def _atomic_species_lines(elements: set[str], spec: QEInputSpec) -> list[str]:
+    lines = ["ATOMIC_SPECIES"]
+    for element in sorted(elements):
+        lines.append(
+            f"{element} {_format_number(spec.atomic_masses[element])} "
+            f"{spec.pseudopotentials[element]}"
+        )
+    return lines
+
+
+def _atomic_positions_lines(structure: AtomisticStructure) -> list[str]:
+    lines = ["ATOMIC_POSITIONS angstrom"]
+    for atom in structure.atoms:
+        lines.append(
+            f"{atom.symbol} {_format_number(atom.x)} "
+            f"{_format_number(atom.y)} {_format_number(atom.z)}"
+        )
+    return lines
+
+
+def _cell_parameter_lines(structure: AtomisticStructure) -> list[str]:
+    if structure.cell is None:
+        raise ValueError("QE CELL_PARAMETERS requires explicit cell vectors")
+    lines = ["CELL_PARAMETERS angstrom"]
+    for vector in structure.cell:
+        lines.append(" ".join(_format_number(component) for component in vector))
+    return lines
+
+
+def _format_qe_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return ".true." if value else ".false."
+    if isinstance(value, str):
+        return f"'{value}'"
+    if isinstance(value, (int, float)):
+        return _format_number(float(value))
+    raise ValueError(f"unsupported QE namelist value {value!r}")
+
+
+def _format_number(value: float) -> str:
+    return f"{value:.12g}"
+
+
 def _int3(value: tuple[int, int, int], label: str) -> tuple[int, int, int]:
     if not isinstance(value, (list, tuple)) or len(value) != 3:
         raise ValueError(f"QE {label} must contain exactly three integers")
     parsed = tuple(int(item) for item in value)
     if any(item <= 0 for item in parsed[:3]) and label == "k-point grid":
         raise ValueError("QE k-point grid values must be positive")
+    return parsed
+
+
+def _atomic_masses(value: dict[str, float]) -> dict[str, float]:
+    parsed: dict[str, float] = {}
+    for element, mass in value.items():
+        if not isinstance(element, str) or not element.strip():
+            raise ValueError("QE atomic mass element keys must be nonempty strings")
+        if not isinstance(mass, (int, float)) or mass <= 0:
+            raise ValueError(
+                f"QE atomic mass for {element!r} must be a positive number"
+            )
+        parsed[element.strip()] = float(mass)
     return parsed
 
 
