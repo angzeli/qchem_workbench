@@ -4,6 +4,7 @@ import csv
 import json
 
 from qchem_workbench.backends.gaussian_parser import parse_gaussian_output
+from qchem_workbench.backends.orca_parser import parse_orca_output
 from qchem_workbench.backends.pyscf_backend import MissingOptionalDependencyError
 from qchem_workbench.cli import main
 from qchem_workbench.core.result import CalculationResult
@@ -690,6 +691,98 @@ def test_parse_gaussian_continues_on_parser_exception(tmp_path, monkeypatch):
     assert len(payload["results"]) == 2
     assert any(
         "synthetic parser failure" in result["warnings"][0] for result in failed
+    )
+
+
+def test_parse_orca_scans_recursively_and_writes_json(tmp_path):
+    outputs = tmp_path / "outputs"
+    nested = outputs / "nested"
+    nested.mkdir(parents=True)
+    (outputs / "water.out").write_text(
+        "! B3LYP def2-SVP SP\n"
+        "FINAL SINGLE POINT ENERGY     -76.1000000000\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+    (nested / "co2.out").write_text(
+        "! B3LYP def2-SVP SP\n"
+        "FINAL SINGLE POINT ENERGY     -188.2000000000\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+    (outputs / "ignore.log").write_text("not scanned by parse-orca\n", encoding="utf-8")
+    out_path = tmp_path / "results" / "orca_results.json"
+
+    exit_code = main(["parse-orca", str(outputs), "--out", str(out_path)])
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert payload["parser"] == "orca"
+    assert [result["species_name"] for result in payload["results"]] == [
+        "co2",
+        "water",
+    ]
+    assert all(result["backend"] == "orca" for result in payload["results"])
+
+
+def test_parse_orca_writes_csv(tmp_path):
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    (outputs / "freq.out").write_text(
+        "! B3LYP def2-SVP Freq\n"
+        "Frequencies --   -10.0   250.0\n"
+        "FINAL SINGLE POINT ENERGY     -1.0000000000\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "results" / "orca_results.json"
+    csv_path = tmp_path / "results" / "orca_results.csv"
+
+    exit_code = main(
+        [
+            "parse-orca",
+            str(outputs),
+            "--out",
+            str(out_path),
+            "--csv",
+            str(csv_path),
+        ]
+    )
+
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert exit_code == 0
+    assert rows[0]["species_name"] == "freq"
+    assert rows[0]["negative_frequency_count"] == "1"
+    assert rows[0]["most_negative_frequency_cm1"] == "-10.0"
+
+
+def test_parse_orca_continues_on_parser_exception(tmp_path, monkeypatch):
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    (outputs / "bad.out").write_text("synthetic malformed output\n", encoding="utf-8")
+    (outputs / "good.out").write_text(
+        "! B3LYP def2-SVP SP\n****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "results" / "orca_results.json"
+
+    def fake_parse(path):
+        if path.name == "bad.out":
+            raise ValueError("synthetic ORCA parser failure")
+        return parse_orca_output(path)
+
+    monkeypatch.setattr("qchem_workbench.cli.parse_orca_output", fake_parse)
+
+    exit_code = main(["parse-orca", str(outputs), "--out", str(out_path)])
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    failed = [result for result in payload["results"] if not result["success"]]
+    assert exit_code == 0
+    assert len(payload["results"]) == 2
+    assert any(
+        "synthetic ORCA parser failure" in result["warnings"][0]
+        for result in failed
     )
 
 

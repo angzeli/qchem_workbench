@@ -32,6 +32,7 @@ from qchem_workbench.backends.orca_input import (
     ORCAInputOptions,
     render_orca_input,
 )
+from qchem_workbench.backends.orca_parser import parse_orca_output
 from qchem_workbench.backends.pyscf_backend import (
     MissingOptionalDependencyError,
     PySCFBackend,
@@ -169,6 +170,14 @@ def build_parser() -> argparse.ArgumentParser:
     parse_gaussian_parser.add_argument("--out", required=True, type=Path)
     parse_gaussian_parser.add_argument("--csv", type=Path)
     parse_gaussian_parser.set_defaults(func=_parse_gaussian_command)
+
+    parse_orca_parser = subparsers.add_parser(
+        "parse-orca", help="parse ORCA .out files"
+    )
+    parse_orca_parser.add_argument("path", type=Path)
+    parse_orca_parser.add_argument("--out", required=True, type=Path)
+    parse_orca_parser.add_argument("--csv", type=Path)
+    parse_orca_parser.set_defaults(func=_parse_orca_command)
 
     check_results_parser = subparsers.add_parser(
         "check-results", help="run quality checks on a result collection"
@@ -346,7 +355,30 @@ def _parse_gaussian_command(args: argparse.Namespace) -> int:
     try:
         paths = _gaussian_output_paths(args.path)
         results = _parse_gaussian_outputs(paths)
-        _write_parsed_result_collection(args.out, results)
+        _write_parsed_result_collection(args.out, results, parser="gaussian")
+        if args.csv is not None:
+            _write_parsed_result_csv(args.csv, results)
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("file\tsuccess\telectronic_energy_hartree\twarnings")
+    for result in results:
+        source_path = result.source_path if result.source_path else ""
+        energy = (
+            ""
+            if result.electronic_energy_hartree is None
+            else f"{result.electronic_energy_hartree:.12g}"
+        )
+        print(f"{source_path}\t{result.success}\t{energy}\t{len(result.warnings)}")
+    return 0
+
+
+def _parse_orca_command(args: argparse.Namespace) -> int:
+    try:
+        paths = _orca_output_paths(args.path)
+        results = _parse_orca_outputs(paths)
+        _write_parsed_result_collection(args.out, results, parser="orca")
         if args.csv is not None:
             _write_parsed_result_csv(args.csv, results)
     except OSError as exc:
@@ -536,7 +568,7 @@ def _run_project_parse_gaussian(manifest: ProjectManifest) -> None:
     )
     paths = _gaussian_output_paths(outputs_dir)
     results = _parse_gaussian_outputs(paths)
-    _write_parsed_result_collection(results_path, results)
+    _write_parsed_result_collection(results_path, results, parser="gaussian")
     print(f"Parsed {len(results)} Gaussian output file(s) into {results_path}.")
 
 
@@ -908,12 +940,46 @@ def _parse_gaussian_outputs(paths: list[Path]) -> list[CalculationResult]:
     return results
 
 
+def _orca_output_paths(path: Path) -> list[Path]:
+    target = Path(path)
+    if target.is_file():
+        return [target] if target.suffix.lower() == ".out" else []
+    if not target.exists():
+        raise FileNotFoundError(f"{target} does not exist")
+    return sorted(
+        file_path
+        for file_path in target.rglob("*")
+        if file_path.is_file() and file_path.suffix.lower() == ".out"
+    )
+
+
+def _parse_orca_outputs(paths: list[Path]) -> list[CalculationResult]:
+    results: list[CalculationResult] = []
+    for path in paths:
+        try:
+            result = parse_orca_output(path)
+        except Exception as exc:
+            result = CalculationResult(
+                species_name=path.stem,
+                backend="orca",
+                method=None,
+                basis=None,
+                task=None,
+                success=False,
+                warnings=[f"Parser raised exception: {exc}"],
+                metadata={"exception_type": type(exc).__name__},
+                source_path=path,
+            )
+        results.append(result)
+    return results
+
+
 def _write_parsed_result_collection(
-    path: Path, results: list[CalculationResult]
+    path: Path, results: list[CalculationResult], parser: str
 ) -> None:
     payload = {
         "schema_version": RESULT_COLLECTION_SCHEMA_VERSION,
-        "parser": "gaussian",
+        "parser": parser,
         "results": [result.to_dict() for result in results],
     }
     path.parent.mkdir(parents=True, exist_ok=True)

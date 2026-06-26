@@ -18,6 +18,7 @@ The current workflow support focuses on:
 - PySCF single-point calculations through an optional backend.
 - Gaussian input rendering without running Gaussian.
 - Gaussian output parsing from `.log` and `.out` files.
+- ORCA input rendering and `.out` parsing without running ORCA.
 - Generic species, result, quality-check, reaction, report, and project
   manifest utilities.
 
@@ -71,6 +72,13 @@ Parse Gaussian-like outputs:
 qchemwb parse-gaussian demo/outputs --out demo/results/gaussian_results.json
 ```
 
+Render and parse ORCA files without requiring ORCA during this workflow step:
+
+```bash
+qchemwb render-orca demo/species.yaml --method b3lyp --basis def2-svp --task single_point --out demo/orca_inputs
+qchemwb parse-orca demo/outputs --out demo/results/orca_results.json
+```
+
 Run quality checks and write a Markdown report:
 
 ```bash
@@ -120,6 +128,19 @@ qchemwb parse-gaussian examples/basic_molecules/outputs --out /tmp/qchemwb-basic
 
 Missing parsed values remain missing. Parser warnings are recorded rather than
 filled with invented values.
+
+## ORCA Input And Output
+
+ORCA support is file-based. qchem-workbench can render `.inp` files and parse
+ORCA-like `.out` files into the same generic result schema:
+
+```bash
+qchemwb render-orca examples/basic_molecules/species.yaml --method b3lyp --basis def2-svp --task opt_freq --out /tmp/qchemwb-basic-orca --force
+qchemwb parse-orca /path/to/orca_outputs --out /tmp/qchemwb-orca-results.json
+```
+
+The tool does not execute ORCA, does not assume a local ORCA binary path or
+cluster scheduler, and does not require ORCA for CI.
 
 ## Species Registry Format
 

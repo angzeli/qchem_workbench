@@ -12,7 +12,8 @@ backend integrations:
 - `qchem_workbench.core`: generic species, geometry, calculation, result, units,
   and registry models.
 - `qchem_workbench.backends`: backend protocol plus PySCF, Gaussian input,
-  Gaussian parser, and Gaussian scheduler-template helpers.
+  Gaussian parser, Gaussian scheduler-template helpers, ORCA input, and ORCA
+  parser helpers.
 - `qchem_workbench.analysis`: quality checks, result/species matching, and
   stoichiometric reaction-energy bookkeeping.
 - `qchem_workbench.results`: JSON result-store helpers.
@@ -123,6 +124,28 @@ Implemented parsing includes:
 Incomplete files should not crash the parser. Missing values remain missing and
 warnings explain what was not found. Negative frequencies are reported without
 assigning transition-state identity.
+
+## ORCA Input And Parser Design
+
+`qchem_workbench.backends.orca_input.render_orca_input()` renders `.inp` text
+from a `Species`, a `CalculationSpec`, and explicit ORCA input options. It does
+not run ORCA.
+
+`qchem_workbench.backends.orca_parser.parse_orca_output()` reads an ORCA-like
+`.out` file and returns a `CalculationResult`.
+
+Implemented parsing includes:
+
+- normal and error termination flags;
+- route line when present;
+- final single-point electronic energy;
+- frequencies, negative-frequency count, and most negative frequency;
+- Hartree-labelled thermochemistry corrections when present;
+- eV-labelled HOMO/LUMO summaries when present;
+- `S**2` metadata when present.
+
+ORCA execution remains external. The parser uses synthetic fixtures in tests and
+does not require ORCA in CI.
 
 ## Quality Checks
 
