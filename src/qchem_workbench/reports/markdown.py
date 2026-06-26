@@ -6,6 +6,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Iterable
 
+from qchem_workbench.analysis.adsorption import AdsorptionEnergyRow
 from qchem_workbench.analysis.quality_checks import QualityCheck
 from qchem_workbench.analysis.reactions import ReactionEnergyRow
 from qchem_workbench.core.result import CalculationResult
@@ -21,6 +22,7 @@ def generate_markdown_report(
     species: Iterable[Species] | None = None,
     quality_checks: Iterable[QualityCheck] | None = None,
     reaction_rows: Iterable[ReactionEnergyRow] | None = None,
+    adsorption_rows: Iterable[AdsorptionEnergyRow] | None = None,
     title: str = "qchem-workbench report",
 ) -> str:
     """Return a GitHub-readable Markdown report.
@@ -33,10 +35,17 @@ def generate_markdown_report(
     species_list = list(species) if species is not None else None
     check_list = list(quality_checks or [])
     reaction_row_list = list(reaction_rows or [])
+    adsorption_row_list = list(adsorption_rows or [])
 
     sections = [
         f"# {_markdown_text(title)}",
-        _project_summary(result_list, species_list, check_list, reaction_row_list),
+        _project_summary(
+            result_list,
+            species_list,
+            check_list,
+            reaction_row_list,
+            adsorption_row_list,
+        ),
     ]
     if species_list is not None:
         sections.append(_species_table(species_list))
@@ -44,7 +53,16 @@ def generate_markdown_report(
     sections.append(_quality_check_summary(check_list))
     if reaction_row_list:
         sections.append(_reaction_energy_table(reaction_row_list))
-    sections.append(_method_provenance_summary(result_list, reaction_row_list))
+    if adsorption_row_list:
+        sections.append(_adsorption_system_summary(adsorption_row_list, result_list))
+        sections.append(_adsorption_energy_table(adsorption_row_list))
+    sections.append(
+        _method_provenance_summary(
+            result_list,
+            reaction_row_list,
+            adsorption_row_list,
+        )
+    )
     return "\n\n".join(sections).rstrip() + "\n"
 
 
@@ -55,6 +73,7 @@ def write_markdown_report(
     species: Iterable[Species] | None = None,
     quality_checks: Iterable[QualityCheck] | None = None,
     reaction_rows: Iterable[ReactionEnergyRow] | None = None,
+    adsorption_rows: Iterable[AdsorptionEnergyRow] | None = None,
     title: str = "qchem-workbench report",
 ) -> None:
     """Write a Markdown report to *path*."""
@@ -66,6 +85,7 @@ def write_markdown_report(
             species=species,
             quality_checks=quality_checks,
             reaction_rows=reaction_rows,
+            adsorption_rows=adsorption_rows,
             title=title,
         ),
         encoding="utf-8",
@@ -77,12 +97,14 @@ def _project_summary(
     species: list[Species] | None,
     checks: list[QualityCheck],
     reaction_rows: list[ReactionEnergyRow],
+    adsorption_rows: list[AdsorptionEnergyRow],
 ) -> str:
     counts = Counter(check.severity for check in checks)
     rows = [
         ("Species in registry", _format_value(len(species)) if species is not None else MISSING),
         ("Calculation results", _format_value(len(results))),
         ("Reaction rows", _format_value(len(reaction_rows))),
+        ("Adsorption rows", _format_value(len(adsorption_rows))),
         ("Quality errors", _format_value(counts.get("error", 0))),
         ("Quality warnings", _format_value(counts.get("warning", 0))),
         ("Quality info", _format_value(counts.get("info", 0))),
@@ -198,8 +220,71 @@ def _reaction_energy_table(rows: list[ReactionEnergyRow]) -> str:
     )
 
 
+def _adsorption_system_summary(
+    rows: list[AdsorptionEnergyRow], results: list[CalculationResult]
+) -> str:
+    result_by_name = {result.species_name: result for result in results}
+    table_rows = [
+        (
+            row.system_id,
+            row.slab_result,
+            _source_path_for_result(result_by_name, row.slab_result),
+            row.adsorbate_result,
+            _source_path_for_result(result_by_name, row.adsorbate_result),
+            row.combined_result,
+            _source_path_for_result(result_by_name, row.combined_result),
+        )
+        for row in rows
+    ]
+    return "## Adsorption system summary\n\n" + _markdown_table(
+        [
+            "System ID",
+            "Clean slab result",
+            "Clean slab source",
+            "Adsorbate result",
+            "Adsorbate source",
+            "Combined result",
+            "Combined source",
+        ],
+        table_rows,
+    )
+
+
+def _adsorption_energy_table(rows: list[AdsorptionEnergyRow]) -> str:
+    table_rows = [
+        (
+            row.system_id,
+            row.quantity,
+            row.complete,
+            _format_number(row.adsorption_hartree),
+            _format_number(row.adsorption_ev),
+            _format_number(row.adsorption_kj_mol),
+            ", ".join(row.missing),
+            ", ".join(row.warnings),
+            row.notes,
+        )
+        for row in rows
+    ]
+    return "## Adsorption energy table\n\n" + _markdown_table(
+        [
+            "System ID",
+            "Quantity",
+            "Complete",
+            "Adsorption energy (Hartree)",
+            "Adsorption energy (eV)",
+            "Adsorption energy (kJ/mol)",
+            "Missing data",
+            "Warnings",
+            "Notes",
+        ],
+        table_rows,
+    )
+
+
 def _method_provenance_summary(
-    results: list[CalculationResult], reaction_rows: list[ReactionEnergyRow]
+    results: list[CalculationResult],
+    reaction_rows: list[ReactionEnergyRow],
+    adsorption_rows: list[AdsorptionEnergyRow],
 ) -> str:
     groups: dict[tuple[str, str, str, str, str], list[CalculationResult]] = {}
     for result in results:
@@ -231,7 +316,7 @@ def _method_provenance_summary(
     if not rows:
         rows = [(MISSING, MISSING, MISSING, MISSING, MISSING, 0, MISSING)]
 
-    warnings = _method_consistency_warnings(results, reaction_rows)
+    warnings = _method_consistency_warnings(results, reaction_rows, adsorption_rows)
     warning_text = (
         "No method/provenance consistency warnings."
         if not warnings
@@ -245,7 +330,9 @@ def _method_provenance_summary(
 
 
 def _method_consistency_warnings(
-    results: list[CalculationResult], reaction_rows: list[ReactionEnergyRow]
+    results: list[CalculationResult],
+    reaction_rows: list[ReactionEnergyRow],
+    adsorption_rows: list[AdsorptionEnergyRow],
 ) -> list[str]:
     warnings = []
     if len(_distinct_values(results, "backend")) > 1:
@@ -259,6 +346,9 @@ def _method_consistency_warnings(
             "Reaction rows are shown with mixed backend/method/basis results; "
             "verify each row was computed from a consistent result subset."
         )
+    for row in adsorption_rows:
+        for warning in row.warnings:
+            warnings.append(f"Adsorption row {row.system_id}: {warning}")
     return warnings
 
 
@@ -283,6 +373,15 @@ def _metadata_value(result: CalculationResult, key: str) -> str:
     if value is None or value == "":
         return MISSING
     return str(value)
+
+
+def _source_path_for_result(
+    result_by_name: dict[str, CalculationResult], species_name: str
+) -> str:
+    result = result_by_name.get(species_name)
+    if result is None or result.source_path is None:
+        return MISSING
+    return str(result.source_path)
 
 
 def _markdown_table(headers: list[str], rows: Iterable[Iterable[object]]) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from qchem_workbench.analysis.adsorption import AdsorptionEnergyRow
 from qchem_workbench.analysis.quality_checks import QualityCheck
 from qchem_workbench.analysis.reactions import ReactionEnergyRow
 from qchem_workbench.core.result import CalculationResult
@@ -225,3 +226,107 @@ def test_reaction_report_warns_when_results_are_mixed():
     report = generate_markdown_report(results, reaction_rows=rows)
 
     assert "Reaction rows are shown with mixed backend/method/basis results" in report
+
+
+def test_markdown_report_includes_adsorption_table(tmp_path):
+    results = [
+        CalculationResult(
+            species_name="slab_clean",
+            backend="qe",
+            method="pbe",
+            basis="ecutwfc=40",
+            task="scf",
+            success=True,
+            source_path=tmp_path / "slab.out",
+        ),
+        CalculationResult(
+            species_name="co_gas",
+            backend="qe",
+            method="pbe",
+            basis="ecutwfc=40",
+            task="scf",
+            success=True,
+            source_path=tmp_path / "co.out",
+        ),
+        CalculationResult(
+            species_name="slab_co",
+            backend="qe",
+            method="pbe",
+            basis="ecutwfc=40",
+            task="scf",
+            success=True,
+            source_path=tmp_path / "slab_co.out",
+        ),
+    ]
+    rows = [
+        AdsorptionEnergyRow(
+            system_id="co_on_surface",
+            quantity="adsorption_electronic_energy",
+            slab_result="slab_clean",
+            adsorbate_result="co_gas",
+            combined_result="slab_co",
+            adsorption_hartree=-0.01,
+            adsorption_ev=-0.272,
+            adsorption_kj_mol=-26.25,
+            complete=True,
+            missing=(),
+            warnings=(),
+            notes="No correction terms applied.",
+        )
+    ]
+
+    report = generate_markdown_report(results, adsorption_rows=rows)
+
+    assert "## Adsorption system summary" in report
+    assert "## Adsorption energy table" in report
+    assert "Adsorption energy (eV)" in report
+    assert "slab_co.out" in report
+    assert "| co_on_surface | adsorption_electronic_energy | True |" in report
+
+
+def test_adsorption_report_shows_incomplete_rows():
+    rows = [
+        AdsorptionEnergyRow(
+            system_id="co_on_surface",
+            quantity="adsorption_gibbs_free_energy",
+            slab_result="slab_clean",
+            adsorbate_result="co_gas",
+            combined_result="slab_co",
+            adsorption_hartree=None,
+            adsorption_ev=None,
+            adsorption_kj_mol=None,
+            complete=False,
+            missing=("missing_energy:combined:slab_co",),
+            warnings=(),
+        )
+    ]
+
+    report = generate_markdown_report([], adsorption_rows=rows)
+
+    assert "missing_energy:combined:slab_co" in report
+    assert "| co_on_surface | adsorption_gibbs_free_energy | False | N/A |" in report
+
+
+def test_adsorption_report_includes_mixed_method_warning():
+    rows = [
+        AdsorptionEnergyRow(
+            system_id="h_on_surface",
+            quantity="adsorption_electronic_energy",
+            slab_result="slab_clean",
+            adsorbate_result="h_gas",
+            combined_result="slab_h",
+            adsorption_hartree=-0.02,
+            adsorption_ev=-0.544,
+            adsorption_kj_mol=-52.51,
+            complete=True,
+            missing=(),
+            warnings=(
+                "Adsorption components use mixed backend/method/basis/task/solvent settings.",
+            ),
+        )
+    ]
+
+    report = generate_markdown_report([], adsorption_rows=rows)
+
+    assert "Adsorption row h_on_surface" in report
+    assert "mixed backend/method/basis/task/solvent" in report
