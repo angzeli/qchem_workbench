@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from qchem_workbench.core.properties import CalculationProperties
+
 
 @dataclass
 class CalculationResult:
@@ -32,6 +34,7 @@ class CalculationResult:
     metadata: dict[str, Any] = field(default_factory=dict)
     source_path: Path | None = None
     conformer_id: str | None = None
+    properties: CalculationProperties = field(default_factory=CalculationProperties)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -61,6 +64,7 @@ class CalculationResult:
             "gap_ev": self.gap_ev,
             "warnings": list(self.warnings),
             "metadata": dict(self.metadata),
+            "properties": self.properties.to_dict(),
             "source_path": str(self.source_path) if self.source_path else None,
         }
 
@@ -99,4 +103,5 @@ class CalculationResult:
             warnings=list(data.get("warnings", [])),
             metadata=dict(data.get("metadata", {})),
             source_path=Path(source_path) if source_path else None,
+            properties=CalculationProperties.from_dict(data.get("properties")),
         )

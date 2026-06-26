@@ -16,6 +16,13 @@ from qchem_workbench.core.geometry import (
     translate_geometry,
     write_xyz_frames,
 )
+from qchem_workbench.core.properties import (
+    AtomicCharge,
+    CalculationProperties,
+    DipoleMoment,
+    ElectronicExcitation,
+    VibrationalMode,
+)
 from qchem_workbench.core.registry import SUPPORTED_SCHEMA_VERSION, load_species_registry
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species, SpeciesConformer
@@ -25,13 +32,18 @@ from qchem_workbench.core.units import HARTREE_TO_EV, hartree_to_ev
 __all__ = [
     "Atom",
     "AtomisticStructure",
+    "AtomicCharge",
+    "CalculationProperties",
     "CalculationResult",
     "CalculationSpec",
+    "DipoleMoment",
+    "ElectronicExcitation",
     "HARTREE_TO_EV",
     "MoleculeGeometry",
     "SUPPORTED_SCHEMA_VERSION",
     "Species",
     "SpeciesConformer",
+    "VibrationalMode",
     "atom_distance",
     "center_geometry_at_centroid",
     "geometry_centroid",
