@@ -31,6 +31,7 @@ def test_result_serialisation():
         basis="sto-3g",
         task="single_point",
         success=True,
+        conformer_id="conf_001",
         electronic_energy_hartree=-1.0,
         metadata={"n_atoms": 3},
         source_path=Path("outputs/water.out"),
@@ -41,6 +42,7 @@ def test_result_serialisation():
 
     assert payload["electronic_energy_hartree"] == -1.0
     assert payload["gibbs_free_energy_hartree"] is None
+    assert payload["conformer_id"] == "conf_001"
     assert payload["source_path"] == "outputs/water.out"
 
 

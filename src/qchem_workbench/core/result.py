@@ -31,10 +31,12 @@ class CalculationResult:
     warnings: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     source_path: Path | None = None
+    conformer_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "species_name": self.species_name,
+            "conformer_id": self.conformer_id,
             "backend": self.backend,
             "method": self.method,
             "basis": self.basis,
@@ -67,6 +69,7 @@ class CalculationResult:
         source_path = data.get("source_path")
         return cls(
             species_name=data["species_name"],
+            conformer_id=data.get("conformer_id"),
             backend=data["backend"],
             method=data.get("method"),
             basis=data.get("basis"),

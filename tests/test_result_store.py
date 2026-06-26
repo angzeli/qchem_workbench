@@ -17,6 +17,7 @@ def _result(
     species_name: str = "water",
     source_path: str | None = "outputs/water.log",
     energy: float | None = -76.0,
+    conformer_id: str | None = None,
 ) -> CalculationResult:
     return CalculationResult(
         species_name=species_name,
@@ -29,6 +30,7 @@ def _result(
         warnings=["synthetic warning"],
         metadata={"route": "# wb97xd/6-31g", "run_id": "run-1"},
         source_path=Path(source_path) if source_path else None,
+        conformer_id=conformer_id,
     )
 
 
@@ -87,6 +89,15 @@ def test_deduplicate_uses_run_id_when_source_path_missing():
 
     assert len(deduplicated) == 1
     assert deduplicated[0].electronic_energy_hartree == -2.0
+
+
+def test_deduplicate_keeps_distinct_conformer_ids():
+    first = _result(source_path=None, conformer_id="conf_001", energy=-1.0)
+    second = _result(source_path=None, conformer_id="conf_002", energy=-2.0)
+
+    deduplicated = deduplicate_results([first, second])
+
+    assert len(deduplicated) == 2
 
 
 def test_store_preserves_warnings_and_metadata(tmp_path):

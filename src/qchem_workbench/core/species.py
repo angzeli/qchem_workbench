@@ -8,6 +8,26 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class SpeciesConformer:
+    """Candidate geometry associated with a species."""
+
+    id: str
+    geometry_path: Path
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise ValueError("conformer id cannot be empty")
+        if isinstance(self.geometry_path, str) and not self.geometry_path.strip():
+            raise ValueError("conformer geometry_path cannot be empty")
+        if self.geometry_path is None:
+            raise ValueError("conformer geometry_path cannot be empty")
+
+        object.__setattr__(self, "geometry_path", Path(self.geometry_path))
+        object.__setattr__(self, "metadata", dict(self.metadata))
+
+
+@dataclass(frozen=True)
 class Species:
     """Backend-independent description of a molecular species."""
 
@@ -19,6 +39,7 @@ class Species:
     tags: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
     notes: str | None = None
+    conformers: tuple[SpeciesConformer, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -32,6 +53,11 @@ class Species:
 
         object.__setattr__(self, "geometry_path", Path(self.geometry_path))
         object.__setattr__(self, "tags", tuple(self.tags))
+        object.__setattr__(self, "metadata", dict(self.metadata))
+        object.__setattr__(self, "conformers", tuple(self.conformers))
+        conformer_ids = [conformer.id for conformer in self.conformers]
+        if len(set(conformer_ids)) != len(conformer_ids):
+            raise ValueError("species conformer IDs must be unique")
 
     @property
     def pyscf_spin(self) -> int:

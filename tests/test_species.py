@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from qchem_workbench.core.species import Species
+from qchem_workbench.core.species import Species, SpeciesConformer
 
 
 def test_neutral_singlet_species():
@@ -52,4 +52,39 @@ def test_invalid_multiplicity_is_invalid():
             charge=0,
             multiplicity=0,
             geometry_path=Path("xyz/species.xyz"),
+        )
+
+
+def test_species_conformers_are_preserved():
+    conformer = SpeciesConformer(
+        id="conf_001",
+        geometry_path=Path("xyz/water_conf_001.xyz"),
+    )
+
+    species = Species(
+        name="water",
+        formula="H2O",
+        charge=0,
+        multiplicity=1,
+        geometry_path=Path("xyz/water_conf_001.xyz"),
+        conformers=(conformer,),
+    )
+
+    assert species.conformers == (conformer,)
+
+
+def test_duplicate_conformer_ids_are_invalid():
+    conformer = SpeciesConformer(
+        id="conf_001",
+        geometry_path=Path("xyz/water_conf_001.xyz"),
+    )
+
+    with pytest.raises(ValueError, match="conformer IDs"):
+        Species(
+            name="water",
+            formula="H2O",
+            charge=0,
+            multiplicity=1,
+            geometry_path=Path("xyz/water_conf_001.xyz"),
+            conformers=(conformer, conformer),
         )

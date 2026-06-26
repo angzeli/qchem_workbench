@@ -68,7 +68,7 @@ def append_results(
 
 def deduplicate_results(results: list[CalculationResult]) -> list[CalculationResult]:
     deduplicated: dict[
-        tuple[str, str, str | None, str | None, str | None, str | None],
+        tuple[str, str | None, str, str | None, str | None, str | None, str | None],
         CalculationResult,
     ] = {}
     for result in results:
@@ -78,11 +78,12 @@ def deduplicate_results(results: list[CalculationResult]) -> list[CalculationRes
 
 def result_identity(
     result: CalculationResult,
-) -> tuple[str, str, str | None, str | None, str | None, str | None]:
+) -> tuple[str, str | None, str, str | None, str | None, str | None, str | None]:
     run_id = result.metadata.get("run_id")
     source_or_run_id = str(result.source_path) if result.source_path else run_id
     return (
         result.species_name,
+        result.conformer_id,
         result.backend,
         result.method,
         result.basis,

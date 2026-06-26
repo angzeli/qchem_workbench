@@ -193,9 +193,10 @@ Calculation results keep physically distinct quantities in separate fields:
 The result store is transparent JSON. It preserves warnings, metadata, source
 paths, and missing values.
 
-Stable result fields in v1.0 are:
+Stable result fields include:
 
 - `species_name`
+- `conformer_id`
 - `backend`
 - `method`
 - `basis`

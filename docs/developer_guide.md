@@ -46,6 +46,9 @@ surface.
 `Species` describes a molecular species with name, formula, charge,
 multiplicity, geometry path, tags, metadata, and notes. It validates that names
 are nonempty, multiplicities are positive, and geometry paths are present.
+Optional `SpeciesConformer` entries allow multiple candidate geometries for one
+species. Registry loading validates each conformer geometry but does not rank
+conformers.
 
 `MoleculeGeometry` and `Atom` represent parsed XYZ files. The XYZ parser is
 deterministic and strict: atom counts must match exactly, coordinates must be
@@ -89,6 +92,7 @@ implicitly.
 Important separated fields include:
 
 - `species_name`
+- `conformer_id`
 - `backend`
 - `method`
 - `basis`

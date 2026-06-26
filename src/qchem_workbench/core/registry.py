@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 from qchem_workbench.core.geometry import read_xyz
-from qchem_workbench.core.species import Species
+from qchem_workbench.core.species import Species, SpeciesConformer
 
 
 SUPPORTED_SCHEMA_VERSION = 1
@@ -42,6 +42,8 @@ def load_species_registry(path: Path) -> list[Species]:
             raise ValueError(f"{registry_path}: duplicate species name {item.name!r}")
 
         read_xyz(item.geometry_path)
+        for conformer in item.conformers:
+            read_xyz(conformer.geometry_path)
         seen_names.add(item.name)
         species.append(item)
 
@@ -65,15 +67,17 @@ def _build_species(path: Path, index: int, entry: dict[str, Any]) -> Species:
     name = _required(path, index, entry, "name")
     charge = _required(path, index, entry, "charge")
     multiplicity = _required(path, index, entry, "multiplicity")
-    geometry_value = _required(path, index, entry, "geometry_path")
+    conformers = _conformers_or_error(path, index, entry.get("conformers", []))
 
-    if not isinstance(geometry_value, str):
-        raise ValueError(f"{path}: species[{index}].geometry_path must be a string")
-    geometry_path = Path(geometry_value)
-    if not geometry_path.is_absolute():
-        geometry_path = path.parent / geometry_path
-    if not geometry_path.exists():
-        raise ValueError(f"{path}: missing geometry file {geometry_path}")
+    geometry_value = entry.get("geometry_path")
+    if geometry_value is None:
+        if not conformers:
+            raise ValueError(f"{path}: species[{index}].geometry_path is required")
+        geometry_path = conformers[0].geometry_path
+    else:
+        geometry_path = _geometry_path_or_error(
+            path, index, "geometry_path", geometry_value
+        )
 
     return Species(
         name=_string_or_error(path, index, "name", name),
@@ -84,6 +88,7 @@ def _build_species(path: Path, index: int, entry: dict[str, Any]) -> Species:
         tags=_tags_or_error(path, index, entry.get("tags", [])),
         metadata=_metadata_or_error(path, index, entry.get("metadata", {})),
         notes=_optional_string(path, index, "notes", entry.get("notes")),
+        conformers=conformers,
     )
 
 
@@ -109,6 +114,89 @@ def _int_or_error(path: Path, index: int, key: str, value: Any) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise ValueError(f"{path}: species[{index}].{key} must be an integer")
     return value
+
+
+def _geometry_path_or_error(
+    path: Path, index: int, key: str, value: Any
+) -> Path:
+    if not isinstance(value, str):
+        raise ValueError(f"{path}: species[{index}].{key} must be a string")
+    geometry_path = Path(value)
+    if not geometry_path.is_absolute():
+        geometry_path = path.parent / geometry_path
+    if not geometry_path.exists():
+        raise ValueError(f"{path}: missing geometry file {geometry_path}")
+    return geometry_path
+
+
+def _conformers_or_error(
+    path: Path, species_index: int, value: Any
+) -> tuple[SpeciesConformer, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError(
+            f"{path}: species[{species_index}].conformers must be a list"
+        )
+
+    conformers: list[SpeciesConformer] = []
+    seen_ids: set[str] = set()
+    for conformer_index, entry in enumerate(value, start=1):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"{path}: species[{species_index}].conformers[{conformer_index}] "
+                "must be a mapping"
+            )
+        conformer_id = _required_conformer_field(
+            path, species_index, conformer_index, entry, "id"
+        )
+        geometry_value = _required_conformer_field(
+            path, species_index, conformer_index, entry, "geometry_path"
+        )
+        if not isinstance(conformer_id, str):
+            raise ValueError(
+                f"{path}: species[{species_index}].conformers[{conformer_index}].id "
+                "must be a string"
+            )
+        if conformer_id in seen_ids:
+            raise ValueError(
+                f"{path}: duplicate conformer id {conformer_id!r} for "
+                f"species[{species_index}]"
+            )
+        seen_ids.add(conformer_id)
+        geometry_path = _geometry_path_or_error(
+            path,
+            species_index,
+            f"conformers[{conformer_index}].geometry_path",
+            geometry_value,
+        )
+        conformers.append(
+            SpeciesConformer(
+                id=conformer_id,
+                geometry_path=geometry_path,
+                metadata=_metadata_or_error(
+                    path,
+                    species_index,
+                    entry.get("metadata", {}),
+                ),
+            )
+        )
+    return tuple(conformers)
+
+
+def _required_conformer_field(
+    path: Path,
+    species_index: int,
+    conformer_index: int,
+    entry: dict[str, Any],
+    key: str,
+) -> Any:
+    if key not in entry:
+        raise ValueError(
+            f"{path}: species[{species_index}].conformers[{conformer_index}].{key} "
+            "is required"
+        )
+    return entry[key]
 
 
 def _tags_or_error(path: Path, index: int, value: Any) -> tuple[str, ...]:
