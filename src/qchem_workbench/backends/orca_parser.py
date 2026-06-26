@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from qchem_workbench.core.properties import CalculationProperties, VibrationalMode
 from qchem_workbench.core.result import CalculationResult
 
 
@@ -14,8 +15,18 @@ _FINAL_ENERGY_RE = re.compile(
 )
 _ROUTE_RE = re.compile(r"^\s*!\s+(.+)$", re.MULTILINE)
 _FREQUENCIES_LINE_RE = re.compile(r"Frequencies\s+--\s+(.+)", re.IGNORECASE)
+_IR_INTENSITIES_LINE_RE = re.compile(r"IR\s+Inten(?:sities)?\s+--\s+(.+)", re.IGNORECASE)
+_RAMAN_ACTIVITIES_LINE_RE = re.compile(
+    r"Raman\s+Activ(?:ities)?\s+--\s+(.+)", re.IGNORECASE
+)
 _ORCA_FREQUENCY_RE = re.compile(
     rf"^\s*\d+\s*:\s*({_NUMBER})\s+cm\*\*-?1\b", re.IGNORECASE
+)
+_ORCA_IR_VALUE_RE = re.compile(
+    rf"\bIR(?:\s+Intensity)?\s*(?:=|:)?\s*({_NUMBER})", re.IGNORECASE
+)
+_ORCA_RAMAN_VALUE_RE = re.compile(
+    rf"\bRaman(?:\s+Activity)?\s*(?:=|:)?\s*({_NUMBER})", re.IGNORECASE
 )
 _HOMO_EV_RE = re.compile(
     rf"\bHOMO(?:\s+ENERGY)?\s*(?::|=)?\s*({_NUMBER})\s*eV\b",
@@ -128,7 +139,12 @@ def parse_orca_output(path: Path) -> CalculationResult:
         warnings.append("ORCA final single-point energy was not found.")
 
     thermochemistry = _extract_thermochemistry(text, warnings)
-    frequencies = _extract_frequencies(text, warnings)
+    vibrational_modes = _extract_vibrational_modes(text, warnings)
+    frequencies = [
+        float(mode.frequency_cm1)
+        for mode in vibrational_modes
+        if mode.frequency_cm1 is not None
+    ]
     negative_frequencies = [value for value in frequencies if value < 0.0]
     if negative_frequencies:
         warnings.append(
@@ -178,6 +194,7 @@ def parse_orca_output(path: Path) -> CalculationResult:
         warnings=warnings,
         metadata=metadata,
         source_path=source_path,
+        properties=CalculationProperties(vibrational_modes=tuple(vibrational_modes)),
     )
 
 
@@ -246,32 +263,89 @@ def _extract_thermochemistry(
     return values
 
 
-def _extract_frequencies(text: str, warnings: list[str]) -> list[float]:
-    frequencies: list[float] = []
+def _extract_vibrational_modes(text: str, warnings: list[str]) -> list[VibrationalMode]:
+    modes: list[VibrationalMode] = []
+    lines = text.splitlines()
     malformed_tokens = 0
     malformed_rows = 0
 
-    for line in text.splitlines():
+    for index, line in enumerate(lines):
         line_match = _FREQUENCIES_LINE_RE.search(line)
         if line_match:
-            for token in line_match.group(1).split():
-                try:
-                    frequencies.append(_parse_float(token))
-                except ValueError:
-                    malformed_tokens += 1
+            frequencies, malformed = _parse_float_tokens(line_match.group(1).split())
+            malformed_tokens += malformed
+            ir_values: list[float] = []
+            raman_values: list[float] = []
+            for followup in lines[index + 1 :]:
+                if _FREQUENCIES_LINE_RE.search(followup):
+                    break
+                ir_match = _IR_INTENSITIES_LINE_RE.search(followup)
+                if ir_match:
+                    parsed, malformed = _parse_float_tokens(ir_match.group(1).split())
+                    ir_values = parsed
+                    malformed_tokens += malformed
+                raman_match = _RAMAN_ACTIVITIES_LINE_RE.search(followup)
+                if raman_match:
+                    parsed, malformed = _parse_float_tokens(
+                        raman_match.group(1).split()
+                    )
+                    raman_values = parsed
+                    malformed_tokens += malformed
+            for mode_index, frequency in enumerate(frequencies):
+                modes.append(
+                    VibrationalMode(
+                        frequency_cm1=frequency,
+                        ir_intensity_km_mol=(
+                            ir_values[mode_index]
+                            if mode_index < len(ir_values)
+                            else None
+                        ),
+                        raman_activity_angstrom4_amu=(
+                            raman_values[mode_index]
+                            if mode_index < len(raman_values)
+                            else None
+                        ),
+                        is_imaginary=frequency < 0.0,
+                    )
+                )
             continue
 
         if "cm**" not in line.lower():
             continue
         row_match = _ORCA_FREQUENCY_RE.search(line)
         if row_match:
-            frequencies.append(_parse_float(row_match.group(1)))
+            frequency = _parse_float(row_match.group(1))
+            ir_match = _ORCA_IR_VALUE_RE.search(line)
+            raman_match = _ORCA_RAMAN_VALUE_RE.search(line)
+            modes.append(
+                VibrationalMode(
+                    frequency_cm1=frequency,
+                    ir_intensity_km_mol=(
+                        _parse_float(ir_match.group(1)) if ir_match else None
+                    ),
+                    raman_activity_angstrom4_amu=(
+                        _parse_float(raman_match.group(1)) if raman_match else None
+                    ),
+                    is_imaginary=frequency < 0.0,
+                )
+            )
         else:
             malformed_rows += 1
 
     if malformed_tokens or malformed_rows:
         warnings.append("Malformed ORCA frequency value(s) were ignored.")
-    return frequencies
+    return modes
+
+
+def _parse_float_tokens(tokens: list[str]) -> tuple[list[float], int]:
+    values: list[float] = []
+    malformed = 0
+    for token in tokens:
+        try:
+            values.append(_parse_float(token))
+        except ValueError:
+            malformed += 1
+    return values, malformed
 
 
 def _extract_orbital_summary(

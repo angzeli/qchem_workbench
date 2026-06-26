@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from qchem_workbench.core.properties import CalculationProperties, VibrationalMode
 from qchem_workbench.core.result import CalculationResult
 
 
@@ -13,6 +14,8 @@ _SCF_DONE_RE = re.compile(
 )
 _ROUTE_START_RE = re.compile(r"^\s*#")
 _FREQUENCIES_RE = re.compile(r"Frequencies\s+--\s+(.+)")
+_IR_INTENSITIES_RE = re.compile(r"IR\s+Inten\s+--\s+(.+)", re.IGNORECASE)
+_RAMAN_ACTIVITIES_RE = re.compile(r"Raman\s+Activ\s+--\s+(.+)", re.IGNORECASE)
 _SPIN_LINE_RE = re.compile(r"S\*\*2\s+before\s+annihilation", re.IGNORECASE)
 _SPIN_VALUES_RE = re.compile(
     r"S\*\*2\s+before\s+annihilation\s+"
@@ -86,7 +89,12 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
         warnings.append("SCF electronic energy was not found.")
 
     thermochemistry = _extract_thermochemistry(text, warnings)
-    frequencies = _extract_frequencies(text, warnings)
+    vibrational_modes = _extract_vibrational_modes(text, warnings)
+    frequencies = [
+        float(mode.frequency_cm1)
+        for mode in vibrational_modes
+        if mode.frequency_cm1 is not None
+    ]
     negative_frequencies = [value for value in frequencies if value < 0.0]
     if negative_frequencies:
         warnings.append(
@@ -140,6 +148,7 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
         warnings=warnings,
         metadata=metadata,
         source_path=source_path,
+        properties=CalculationProperties(vibrational_modes=tuple(vibrational_modes)),
     )
 
 
@@ -212,26 +221,78 @@ def _thermochemistry_sections(text: str) -> list[dict[str, float | None]]:
     return sections
 
 
-def _extract_frequencies(text: str, warnings: list[str]) -> list[float]:
-    frequencies: list[float] = []
-    malformed_lines = 0
+def _extract_vibrational_modes(
+    text: str, warnings: list[str]
+) -> list[VibrationalMode]:
+    modes: list[VibrationalMode] = []
+    lines = text.splitlines()
+    malformed_frequency_tokens = 0
+    malformed_property_tokens = 0
 
-    for line in text.splitlines():
+    for index, line in enumerate(lines):
         match = _FREQUENCIES_RE.search(line)
         if not match:
             continue
 
+        frequencies: list[float] = []
         for token in match.group(1).split():
             try:
                 frequencies.append(_parse_float(token))
             except ValueError:
-                malformed_lines += 1
+                malformed_frequency_tokens += 1
 
-    if malformed_lines:
+        ir_values: list[float] = []
+        raman_values: list[float] = []
+        for followup in lines[index + 1 :]:
+            if _FREQUENCIES_RE.search(followup):
+                break
+            ir_match = _IR_INTENSITIES_RE.search(followup)
+            if ir_match:
+                parsed, malformed = _parse_float_tokens(ir_match.group(1).split())
+                ir_values = parsed
+                malformed_property_tokens += malformed
+            raman_match = _RAMAN_ACTIVITIES_RE.search(followup)
+            if raman_match:
+                parsed, malformed = _parse_float_tokens(raman_match.group(1).split())
+                raman_values = parsed
+                malformed_property_tokens += malformed
+
+        for mode_index, frequency in enumerate(frequencies):
+            modes.append(
+                VibrationalMode(
+                    frequency_cm1=frequency,
+                    ir_intensity_km_mol=(
+                        ir_values[mode_index] if mode_index < len(ir_values) else None
+                    ),
+                    raman_activity_angstrom4_amu=(
+                        raman_values[mode_index]
+                        if mode_index < len(raman_values)
+                        else None
+                    ),
+                    is_imaginary=frequency < 0.0,
+                )
+            )
+
+    if malformed_frequency_tokens:
         warnings.append(
             "Malformed Gaussian frequency token(s) were ignored during parsing."
         )
-    return frequencies
+    if malformed_property_tokens:
+        warnings.append(
+            "Malformed Gaussian vibrational property token(s) were ignored."
+        )
+    return modes
+
+
+def _parse_float_tokens(tokens: list[str]) -> tuple[list[float], int]:
+    values: list[float] = []
+    malformed = 0
+    for token in tokens:
+        try:
+            values.append(_parse_float(token))
+        except ValueError:
+            malformed += 1
+    return values, malformed
 
 
 def _extract_spin_metadata(text: str, warnings: list[str]) -> dict[str, float]:

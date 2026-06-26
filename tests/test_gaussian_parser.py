@@ -179,6 +179,34 @@ def test_parse_no_imaginary_frequency(tmp_path):
     assert result.metadata["frequencies_cm1"] == [100.0, 250.5, 3400.2]
     assert result.metadata["negative_frequency_count"] == 0
     assert result.metadata["most_negative_frequency_cm1"] is None
+    assert [mode.frequency_cm1 for mode in result.properties.vibrational_modes] == [
+        100.0,
+        250.5,
+        3400.2,
+    ]
+    assert all(
+        mode.is_imaginary is False for mode in result.properties.vibrational_modes
+    )
+
+
+def test_parse_gaussian_vibrational_spectrum_properties(tmp_path):
+    output_path = tmp_path / "spectrum.log"
+    output_path.write_text(
+        " # wb97xd/6-31g freq\n"
+        " Frequencies --   -50.0   100.0   250.0\n"
+        " IR Inten    --     1.5     2.5     3.5\n"
+        " Raman Activ --     0.1     0.2     0.3\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    modes = result.properties.vibrational_modes
+
+    assert [mode.frequency_cm1 for mode in modes] == [-50.0, 100.0, 250.0]
+    assert [mode.ir_intensity_km_mol for mode in modes] == [1.5, 2.5, 3.5]
+    assert [mode.raman_activity_angstrom4_amu for mode in modes] == [0.1, 0.2, 0.3]
+    assert [mode.is_imaginary for mode in modes] == [True, False, False]
 
 
 def test_parse_one_imaginary_frequency(tmp_path):
@@ -225,7 +253,25 @@ def test_parse_malformed_frequency_line(tmp_path):
     result = parse_gaussian_output(output_path)
 
     assert result.metadata["frequencies_cm1"] == [250.5]
+    assert [mode.frequency_cm1 for mode in result.properties.vibrational_modes] == [
+        250.5
+    ]
     assert any("Malformed Gaussian frequency" in warning for warning in result.warnings)
+
+
+def test_parse_gaussian_missing_intensities_remain_missing(tmp_path):
+    output_path = tmp_path / "missing-intensity.log"
+    output_path.write_text(
+        " # wb97xd/6-31g freq\n"
+        " Frequencies --   100.0   250.5\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.properties.vibrational_modes[0].ir_intensity_km_mol is None
+    assert result.properties.vibrational_modes[0].raman_activity_angstrom4_amu is None
 
 
 def test_parse_unrestricted_spin_info(tmp_path):
