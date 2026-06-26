@@ -102,11 +102,95 @@ def validate_co2rr_molecular(work_dir: Path) -> None:
     )
 
 
+def validate_gaussian_parsing(work_dir: Path) -> None:
+    example = REPO_ROOT / "examples" / "gaussian_parsing"
+    results_path = work_dir / "gaussian_parsing_results.json"
+
+    run_cli(["parse-gaussian", str(example / "outputs"), "--out", str(results_path)])
+    run_cli(["check-results", str(results_path)])
+
+
+def validate_orca_parsing(work_dir: Path) -> None:
+    example = REPO_ROOT / "examples" / "orca_parsing"
+    results_path = work_dir / "orca_parsing_results.json"
+
+    run_cli(["parse-orca", str(example / "outputs"), "--out", str(results_path)])
+    run_cli(["check-results", str(results_path)])
+
+
+def validate_qe_parsing(work_dir: Path) -> None:
+    example = REPO_ROOT / "examples" / "qe_parsing"
+    results_path = work_dir / "qe_parsing_results.json"
+
+    run_cli(["parse-qe", str(example / "outputs"), "--out", str(results_path)])
+    run_cli(["check-results", str(results_path)])
+
+
+def validate_surface_adsorption(work_dir: Path) -> None:
+    example = REPO_ROOT / "examples" / "surface_adsorption"
+
+    run_cli(
+        [
+            "adsorption-table",
+            str(example / "adsorption.yaml"),
+            str(example / "results.json"),
+            "--quantity",
+            "electronic",
+            "--out",
+            str(work_dir / "adsorption_table.csv"),
+        ]
+    )
+
+
+def validate_che_analysis(work_dir: Path) -> None:
+    example = REPO_ROOT / "examples" / "che_analysis"
+
+    run_cli(
+        [
+            "che-table",
+            str(example / "che_pathway.yaml"),
+            str(example / "results.json"),
+            "--out",
+            str(work_dir / "che_table.csv"),
+        ]
+    )
+
+
+def validate_screening_campaign(work_dir: Path) -> None:
+    example = REPO_ROOT / "examples" / "screening_campaign"
+    descriptors_path = work_dir / "descriptors.csv"
+
+    run_cli(
+        [
+            "descriptor-table",
+            str(example / "campaign.yaml"),
+            str(example / "results.json"),
+            "--out",
+            str(descriptors_path),
+        ]
+    )
+    run_cli(
+        [
+            "rank-candidates",
+            str(example / "campaign.yaml"),
+            str(descriptors_path),
+            "--out",
+            str(work_dir / "ranked_candidates.csv"),
+        ]
+    )
+
+
 def main_script() -> int:
     with tempfile.TemporaryDirectory(prefix="qchemwb-examples-") as temp_dir:
         work_dir = Path(temp_dir)
         validate_basic_molecules(work_dir)
+        validate_gaussian_parsing(work_dir)
+        validate_orca_parsing(work_dir)
+        validate_qe_parsing(work_dir)
         validate_co2rr_molecular(work_dir)
+        validate_surface_adsorption(work_dir)
+        validate_che_analysis(work_dir)
+        validate_screening_campaign(work_dir)
     print("Example validation completed successfully.")
     return 0
 

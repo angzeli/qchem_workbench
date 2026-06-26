@@ -1,0 +1,26 @@
+schema_version: 1
+campaign:
+  name: synthetic screening demo
+  backend_mode: gaussian
+  results: results.json
+  candidates:
+    - id: water
+      species: water
+      tags: [synthetic]
+    - id: carbon_monoxide
+      species: carbon_monoxide
+      tags: [synthetic]
+  descriptors:
+    - name: electronic_energy_hartree
+      source: result
+      field: electronic_energy_hartree
+    - name: gap_ev
+      source: result
+      field: gap_ev
+  ranking:
+    rules:
+      - descriptor: quality_error_count
+        filter: exclude_quality_errors
+      - descriptor: gap_ev
+        direction: maximize
+        weight: 1.0

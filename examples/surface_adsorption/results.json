@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "results": [
+    {
+      "species_name": "slab_clean",
+      "backend": "qe",
+      "method": "pbe",
+      "basis": "ecutwfc=40",
+      "task": "scf",
+      "success": true,
+      "electronic_energy_hartree": -100.0,
+      "metadata": {
+        "fixture": "synthetic"
+      }
+    },
+    {
+      "species_name": "co_gas",
+      "backend": "qe",
+      "method": "pbe",
+      "basis": "ecutwfc=40",
+      "task": "scf",
+      "success": true,
+      "electronic_energy_hartree": -10.0,
+      "metadata": {
+        "fixture": "synthetic"
+      }
+    },
+    {
+      "species_name": "slab_co",
+      "backend": "qe",
+      "method": "pbe",
+      "basis": "ecutwfc=40",
+      "task": "scf",
+      "success": true,
+      "electronic_energy_hartree": -110.2,
+      "metadata": {
+        "fixture": "synthetic"
+      }
+    }
+  ]
+}

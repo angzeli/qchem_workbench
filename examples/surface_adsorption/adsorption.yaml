@@ -1,0 +1,7 @@
+schema_version: 1
+adsorption_systems:
+  - id: co_on_surface
+    slab_result: slab_clean
+    adsorbate_result: co_gas
+    combined_result: slab_co
+    notes: Synthetic fixture for adsorption bookkeeping only.

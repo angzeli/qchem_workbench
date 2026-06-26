@@ -1,0 +1,8 @@
+Synthetic ORCA-like fixture for parser testing only.
+! B3LYP def2-SVP Freq
+FINAL SINGLE POINT ENERGY     -76.1000000000
+Frequencies --   100.0   1600.0
+IR Intensities --  1.0     5.0
+HOMO ENERGY    -6.1000 eV
+LUMO ENERGY    -1.2000 eV
+****ORCA TERMINATED NORMALLY****

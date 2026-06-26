@@ -1,0 +1,12 @@
+schema_version: 1
+reactions:
+  - id: step_1
+    reactants:
+      A: 1
+    products:
+      B: 1
+    proton_electron_pairs: 1
+    potential_V: 0.0
+    potential_reference: SHE
+    pH: 0
+    notes: Synthetic CHE bookkeeping step.

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "results": [
+    {
+      "species_name": "A",
+      "backend": "gaussian",
+      "method": "b3lyp",
+      "basis": "6-31g",
+      "task": "freq",
+      "success": true,
+      "gibbs_free_energy_hartree": -2.0,
+      "metadata": {
+        "fixture": "synthetic"
+      }
+    },
+    {
+      "species_name": "B",
+      "backend": "gaussian",
+      "method": "b3lyp",
+      "basis": "6-31g",
+      "task": "freq",
+      "success": true,
+      "gibbs_free_energy_hartree": -1.95,
+      "metadata": {
+        "fixture": "synthetic"
+      }
+    }
+  ]
+}

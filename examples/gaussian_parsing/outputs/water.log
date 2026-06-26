@@ -1,0 +1,6 @@
+Synthetic Gaussian-like fixture for parser testing only.
+ # b3lyp/6-31g freq
+ SCF Done:  E(RB3LYP) =  -76.1000000000     A.U. after 10 cycles
+ Frequencies --   100.0   1600.0
+ IR Inten    --     1.0     5.0
+ Normal termination of Gaussian 16

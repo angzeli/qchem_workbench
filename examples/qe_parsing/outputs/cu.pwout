@@ -1,0 +1,10 @@
+Synthetic Quantum ESPRESSO-like fixture for parser testing only.
+number of atoms/cell      = 1
+CELL_PARAMETERS (angstrom)
+ 3.6 0.0 0.0
+ 0.0 3.6 0.0
+ 0.0 0.0 3.6
+     convergence has been achieved in 6 iterations
+!    total energy              =     -114.000000 Ry
+Maximum force = 0.0012 Ry/bohr
+JOB DONE.
