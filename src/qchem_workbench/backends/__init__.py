@@ -18,6 +18,7 @@ from qchem_workbench.backends.orca_input import (
     orca_route_from_spec,
     render_orca_input,
 )
+from qchem_workbench.backends.orca_parser import parse_orca_output
 from qchem_workbench.backends.pyscf_backend import (
     MissingOptionalDependencyError,
     PySCFBackend,
@@ -35,6 +36,7 @@ __all__ = [
     "gaussian_route_from_spec",
     "orca_route_from_spec",
     "parse_gaussian_output",
+    "parse_orca_output",
     "render_gaussian_input",
     "render_gaussian_scheduler_script",
     "render_orca_input",
