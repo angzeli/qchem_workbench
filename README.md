@@ -12,6 +12,7 @@ compute DFT, wavefunction methods, molecular dynamics, thermochemistry
 corrections, or electrochemical corrections from scratch. It does not replace
 Gaussian, PySCF, ORCA, Quantum ESPRESSO, VASP, or any other
 electronic-structure code.
+External engines, licensed software, and pseudopotential files are not bundled.
 
 The current workflow support focuses on:
 
@@ -25,7 +26,8 @@ The current workflow support focuses on:
 - Generic species, result, quality-check, reaction, report, and project
   manifest utilities.
 - Generic adsorption-energy and CHE-style electrochemical bookkeeping with
-  explicit, user-visible correction terms.
+  explicit, user-visible correction terms. These workflows require expert
+  validation.
 - Screening campaign manifests, descriptor tables, and transparent rule-based
   rankings. These are workflow tables, not activity predictions.
 
@@ -52,10 +54,22 @@ For optional ASE structure conversion and slab helpers:
 pip install -e ".[ase]"
 ```
 
+For optional RDKit conformer setup helpers:
+
+```bash
+pip install -e ".[rdkit]"
+```
+
 For documentation builds:
 
 ```bash
 pip install -e ".[docs]"
+```
+
+For local development tests and currently configured developer tools:
+
+```bash
+pip install -e ".[dev]"
 ```
 
 Run the test suite:
@@ -275,7 +289,7 @@ is `1` for:
 - species registries;
 - result collections;
 - pathway files;
-- project manifests.
+- project manifests;
 - campaign manifests.
 
 Missing `schema_version` fields and unsupported schema versions are rejected
@@ -321,6 +335,7 @@ Stable result fields include:
 - `gap_ev`
 - `warnings`
 - `metadata`
+- `properties`
 - `source_path`
 
 ## Reaction Table Workflow
@@ -471,6 +486,8 @@ Generic pathway example:
   unrequested corrections.
 - CHE-style tables expose every correction term and do not treat limiting
   potentials as experimentally validated overpotentials.
+- Surface and CHE workflow outputs are bookkeeping aids that require expert
+  review before scientific interpretation.
 
 ## Author
 

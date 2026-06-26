@@ -2,6 +2,8 @@
 
 qchem-workbench provides transparent bookkeeping utilities. It does not apply
 hidden correction terms or infer mechanisms.
+Surface adsorption and CHE-style outputs are bookkeeping aids that require
+expert validation before scientific interpretation.
 
 Implemented workflows include:
 
