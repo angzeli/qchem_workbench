@@ -26,6 +26,7 @@ from qchem_workbench.analysis.reactions import reaction_electronic_energy_table
 from qchem_workbench.analysis.reactions import reaction_gibbs_free_energy_table
 from qchem_workbench.analysis.result_matching import match_results_to_species
 from qchem_workbench.backends.ase_adapter import ASEUnavailableError, from_ase_atoms
+from qchem_workbench.backends.ase_adsorption import place_adsorbate_from_yaml
 from qchem_workbench.backends.ase_surface import (
     SUPPORTED_FCC_FACETS,
     build_fcc_surface,
@@ -139,6 +140,14 @@ def build_parser() -> argparse.ArgumentParser:
     build_slab_parser.add_argument("--vacuum", required=True, type=float)
     build_slab_parser.add_argument("--out", required=True, type=Path)
     build_slab_parser.set_defaults(func=_build_slab_command)
+
+    place_adsorbate_parser = subparsers.add_parser(
+        "place-adsorbate",
+        help="place an adsorbate starting geometry with optional ASE",
+    )
+    place_adsorbate_parser.add_argument("placement", type=Path)
+    place_adsorbate_parser.add_argument("--out", required=True, type=Path)
+    place_adsorbate_parser.set_defaults(func=_place_adsorbate_command)
 
     render_qe_parser = subparsers.add_parser(
         "render-qe", help="render a Quantum ESPRESSO pw.x input file"
@@ -427,6 +436,19 @@ def _build_slab_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Wrote starting slab to {args.out}.")
+    print(f"atoms\t{len(structure.atoms)}")
+    print(f"warning\t{structure.metadata['warning']}")
+    return 0
+
+
+def _place_adsorbate_command(args: argparse.Namespace) -> int:
+    try:
+        structure = place_adsorbate_from_yaml(args.placement, args.out)
+    except (OSError, ValueError, ASEUnavailableError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote starting slab+adsorbate structure to {args.out}.")
     print(f"atoms\t{len(structure.atoms)}")
     print(f"warning\t{structure.metadata['warning']}")
     return 0

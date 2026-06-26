@@ -198,6 +198,40 @@ def test_build_slab_cli_when_ase_available(tmp_path, capsys):
     assert "not relaxed" in captured.out
 
 
+def test_place_adsorbate_cli_when_ase_available(tmp_path, capsys):
+    pytest.importorskip("ase")
+    (tmp_path / "slab.xyz").write_text(
+        "1\nsynthetic fixture slab atom\nCu 0 0 0\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "co.xyz").write_text(
+        "2\nsynthetic fixture adsorbate\nC 0 0 0\nO 0 0 1.1\n",
+        encoding="utf-8",
+    )
+    placement_path = tmp_path / "placement.yaml"
+    placement_path.write_text(
+        "schema_version: 1\n"
+        "placement:\n"
+        "  slab_structure_path: slab.xyz\n"
+        "  adsorbate_structure_path: co.xyz\n"
+        "  anchor_atom: 0\n"
+        "  target_position: [0.0, 0.0, 0.0]\n"
+        "  height: 2.0\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "structures" / "slab_co.xyz"
+
+    exit_code = main(
+        ["place-adsorbate", str(placement_path), "--out", str(out_path)]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert out_path.exists()
+    assert "atoms\t3" in captured.out
+    assert "not relaxed" in captured.out
+
+
 def test_render_qe_from_fixture_structure(tmp_path, capsys):
     structure_path = tmp_path / "h2.xyz"
     structure_path.write_text(

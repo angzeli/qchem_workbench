@@ -5,6 +5,13 @@ from qchem_workbench.backends.ase_adapter import (
     from_ase_atoms,
     to_ase_atoms,
 )
+from qchem_workbench.backends.ase_adsorption import (
+    STARTING_ADSORBATE_PLACEMENT_WARNING,
+    AdsorbatePlacementConfig,
+    load_adsorbate_placement_config,
+    place_adsorbate,
+    place_adsorbate_from_yaml,
+)
 from qchem_workbench.backends.ase_surface import (
     STARTING_STRUCTURE_WARNING,
     SUPPORTED_FCC_FACETS,
@@ -46,6 +53,7 @@ from qchem_workbench.backends.qe_parser import parse_qe_output
 
 __all__ = [
     "ASEUnavailableError",
+    "AdsorbatePlacementConfig",
     "Backend",
     "GAUSSIAN_TASK_PRESETS",
     "GaussianInputOptions",
@@ -56,16 +64,20 @@ __all__ = [
     "QEInputSpec",
     "QEKPoints",
     "SCHEDULER_NAMES",
+    "STARTING_ADSORBATE_PLACEMENT_WARNING",
     "STARTING_STRUCTURE_WARNING",
     "SUPPORTED_FCC_FACETS",
     "add_vacuum",
     "build_fcc_surface",
     "gaussian_route_from_spec",
     "from_ase_atoms",
+    "load_adsorbate_placement_config",
     "orca_route_from_spec",
     "parse_gaussian_output",
     "parse_orca_output",
     "parse_qe_output",
+    "place_adsorbate",
+    "place_adsorbate_from_yaml",
     "render_gaussian_input",
     "render_gaussian_scheduler_script",
     "render_orca_input",
