@@ -1,5 +1,10 @@
 """Backend interfaces and implementations."""
 
+from qchem_workbench.backends.ase_adapter import (
+    ASEUnavailableError,
+    from_ase_atoms,
+    to_ase_atoms,
+)
 from qchem_workbench.backends.base import Backend
 from qchem_workbench.backends.gaussian_input import (
     GAUSSIAN_TASK_PRESETS,
@@ -25,6 +30,7 @@ from qchem_workbench.backends.pyscf_backend import (
 )
 
 __all__ = [
+    "ASEUnavailableError",
     "Backend",
     "GAUSSIAN_TASK_PRESETS",
     "GaussianInputOptions",
@@ -34,10 +40,12 @@ __all__ = [
     "PySCFBackend",
     "SCHEDULER_NAMES",
     "gaussian_route_from_spec",
+    "from_ase_atoms",
     "orca_route_from_spec",
     "parse_gaussian_output",
     "parse_orca_output",
     "render_gaussian_input",
     "render_gaussian_scheduler_script",
     "render_orca_input",
+    "to_ase_atoms",
 ]

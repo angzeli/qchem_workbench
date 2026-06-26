@@ -19,6 +19,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ase = [
+  "ase>=3.22",
+]
 dev = [
   "pytest",
   "ruff",
