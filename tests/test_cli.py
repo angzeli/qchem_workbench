@@ -102,6 +102,28 @@ def test_validate_failure(tmp_path, capsys):
     assert "unsupported schema_version" in captured.err
 
 
+def test_schema_check_cli_reports_file_type_and_problems(tmp_path, capsys):
+    valid_path = tmp_path / "pathway.yaml"
+    valid_path.write_text("schema_version: 1\nreactions: []\n", encoding="utf-8")
+    invalid_path = tmp_path / "species.yaml"
+    invalid_path.write_text("schema_version: 99\nspecies: []\n", encoding="utf-8")
+
+    valid_exit = main(["schema-check", str(valid_path)])
+    valid_output = capsys.readouterr()
+    invalid_exit = main(["schema-check", str(invalid_path), "--write"])
+    invalid_output = capsys.readouterr()
+
+    assert valid_exit == 0
+    assert "file_type\tpathway" in valid_output.out
+    assert "valid\tTrue" in valid_output.out
+    assert "No migration required." in valid_output.out
+    assert invalid_exit == 1
+    assert "file_type\tspecies_registry" in invalid_output.out
+    assert "valid\tFalse" in invalid_output.out
+    assert "unsupported schema_version 99" in invalid_output.out
+    assert "No migration is implemented" in invalid_output.out
+
+
 def test_inspect_structure_xyz(tmp_path, capsys):
     xyz_path = tmp_path / "water.xyz"
     xyz_path.write_text(

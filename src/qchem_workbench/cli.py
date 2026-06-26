@@ -90,6 +90,7 @@ from qchem_workbench.results.store import (
     RESULT_COLLECTION_SCHEMA_VERSION,
     load_result_collection,
 )
+from qchem_workbench.schema import check_schema_file
 from qchem_workbench.templates.project import (
     PROJECT_DIRECTORIES,
     TEMPLATE_NAMES,
@@ -129,6 +130,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_parser.add_argument("registry", type=Path)
     validate_parser.set_defaults(func=_validate_command)
+
+    schema_check_parser = subparsers.add_parser(
+        "schema-check", help="detect and validate qchem-workbench schema files"
+    )
+    schema_check_parser.add_argument("path", type=Path)
+    schema_check_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="write migrations when a future migration implementation supports it",
+    )
+    schema_check_parser.set_defaults(func=_schema_check_command)
 
     backends_parser = subparsers.add_parser(
         "backends", help="list registered backend capabilities"
@@ -446,6 +458,18 @@ def _validate_command(args: argparse.Namespace) -> int:
 
     print(f"Validated {len(species)} species in {args.registry}.")
     return 0
+
+
+def _schema_check_command(args: argparse.Namespace) -> int:
+    report = check_schema_file(args.path, write=args.write)
+    print(f"path\t{report.path}")
+    print(f"file_type\t{report.file_type or 'unknown'}")
+    print(f"schema_version\t{'' if report.schema_version is None else report.schema_version}")
+    print(f"valid\t{report.valid}")
+    print(f"migration\t{report.migration.message}")
+    for problem in report.problems:
+        print(f"problem\t{problem}")
+    return 0 if report.valid else 1
 
 
 def _backends_command(args: argparse.Namespace) -> int:
