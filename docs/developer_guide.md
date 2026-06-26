@@ -9,11 +9,11 @@ available here.
 The package is organized around small backend-independent models and optional
 backend integrations:
 
-- `qchem_workbench.core`: generic species, geometry, calculation, result, units,
-  and registry models.
+- `qchem_workbench.core`: generic species, geometry, atomistic structure,
+  calculation, result, units, and registry models.
 - `qchem_workbench.backends`: backend protocol plus PySCF, Gaussian input,
   Gaussian parser, Gaussian scheduler-template helpers, ORCA input, and ORCA
-  parser helpers.
+  parser helpers, plus optional ASE adapters and slab helpers.
 - `qchem_workbench.analysis`: quality checks, result/species matching, and
   stoichiometric reaction-energy bookkeeping.
 - `qchem_workbench.results`: JSON result-store helpers.
@@ -53,6 +53,10 @@ conformers.
 `MoleculeGeometry` and `Atom` represent parsed XYZ files. The XYZ parser is
 deterministic and strict: atom counts must match exactly, coordinates must be
 numeric, and element symbols must be in the supported symbol set.
+
+`AtomisticStructure` represents molecules and periodic structures with atoms,
+optional 3x3 cell vectors, periodic boundary flags, optional charge and
+multiplicity, and metadata. Periodic structures require explicit cell vectors.
 
 Geometry utilities support centroid translation, distance matrices, RMSD, and
 optional Kabsch alignment. RMSD and alignment require identical atom ordering;
@@ -154,6 +158,24 @@ Implemented parsing includes:
 
 ORCA execution remains external. The parser uses synthetic fixtures in tests and
 does not require ORCA in CI.
+
+## ASE Integration
+
+ASE support is optional and isolated to adapter/helper modules. Base package
+imports do not require ASE.
+
+Implemented ASE-facing modules include:
+
+- `qchem_workbench.backends.ase_adapter`: conversion between
+  `AtomisticStructure` and ASE `Atoms`;
+- `qchem_workbench.backends.ase_surface`: simple ASE-backed starting slab
+  helpers and structure writing.
+
+The CLI commands `inspect-structure` and `convert-structure` use built-in XYZ
+support for XYZ files. Other formats require ASE and use ASE I/O without hidden
+coordinate transformations. The `build-slab` command builds simple unrelaxed
+starting slabs through ASE. Generated slabs are not relaxed and should be
+inspected before use in later QE, surface, or adsorption workflows.
 
 ## Quality Checks
 

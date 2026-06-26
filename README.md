@@ -19,6 +19,8 @@ The current workflow support focuses on:
 - Gaussian input rendering without running Gaussian.
 - Gaussian output parsing from `.log` and `.out` files.
 - ORCA input rendering and `.out` parsing without running ORCA.
+- Structure inspection/conversion and starting slab generation through optional
+  ASE support.
 - Generic species, result, quality-check, reaction, report, and project
   manifest utilities.
 
@@ -37,6 +39,12 @@ For the optional PySCF backend:
 
 ```bash
 pip install -e ".[pyscf]"
+```
+
+For optional ASE structure conversion and slab helpers:
+
+```bash
+pip install -e ".[ase]"
 ```
 
 Run the test suite:
@@ -84,6 +92,13 @@ Run quality checks and write a Markdown report:
 ```bash
 qchemwb check-results demo/results/gaussian_results.json --species demo/species.yaml
 qchemwb report demo/results/gaussian_results.json --species demo/species.yaml --out demo/reports/report.md
+```
+
+Inspect and convert simple XYZ structures without ASE:
+
+```bash
+qchemwb inspect-structure demo/xyz/water.xyz
+qchemwb convert-structure demo/xyz/water.xyz /tmp/water-copy.xyz
 ```
 
 ## PySCF Backend
@@ -141,6 +156,34 @@ qchemwb parse-orca /path/to/orca_outputs --out /tmp/qchemwb-orca-results.json
 
 The tool does not execute ORCA, does not assume a local ORCA binary path or
 cluster scheduler, and does not require ORCA for CI.
+
+## ASE Structure Tools
+
+ASE integration is optional. Base qchem-workbench commands, imports, and CI do
+not require ASE. When ASE is installed, qchem-workbench can bridge the generic
+`AtomisticStructure` model to ASE `Atoms` objects and use ASE I/O for formats
+beyond built-in XYZ support.
+
+Built-in XYZ inspection and XYZ-to-XYZ conversion do not require ASE:
+
+```bash
+qchemwb inspect-structure examples/basic_molecules/xyz/water.xyz
+qchemwb convert-structure examples/basic_molecules/xyz/water.xyz /tmp/water.xyz
+```
+
+With ASE installed, `convert-structure` can read and write additional formats
+supported by ASE. The command copies structure data through ASE I/O; it does not
+relax structures, alter coordinates, or attach calculators.
+
+ASE can also create simple starting slabs for later atomistic workflows:
+
+```bash
+qchemwb build-slab --element Cu --facet 111 --size 2 2 4 --vacuum 15 --out /tmp/cu111.xyz
+```
+
+Generated slabs are labelled as starting geometries requiring human inspection.
+They are not relaxed slabs, and qchem-workbench does not run DFT or ASE
+calculators.
 
 ## Species Registry Format
 
