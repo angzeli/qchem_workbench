@@ -8,6 +8,10 @@ from typing import Any
 
 import yaml
 
+from qchem_workbench.analysis.reactions import HARTREE_TO_KJ_MOL
+from qchem_workbench.core.result import CalculationResult
+from qchem_workbench.core.units import HARTREE_TO_EV
+
 
 ADSORPTION_SCHEMA_VERSION = 1
 
@@ -35,6 +39,22 @@ class AdsorptionWorkflow:
     isolated_adsorbates: tuple[AdsorptionCalculationRef, ...]
     slab_adsorbates: tuple[AdsorptionCalculationRef, ...]
     adsorption_systems: tuple[AdsorptionSystem, ...]
+
+
+@dataclass(frozen=True)
+class AdsorptionEnergyRow:
+    system_id: str
+    quantity: str
+    slab_result: str
+    adsorbate_result: str
+    combined_result: str
+    adsorption_hartree: float | None
+    adsorption_ev: float | None
+    adsorption_kj_mol: float | None
+    complete: bool
+    missing: tuple[str, ...]
+    warnings: tuple[str, ...]
+    notes: str | None = None
 
 
 def load_adsorption_workflow(path: Path) -> AdsorptionWorkflow:
@@ -90,6 +110,137 @@ def load_adsorption_workflow(path: Path) -> AdsorptionWorkflow:
         slab_adsorbates=slab_adsorbates,
         adsorption_systems=systems,
     )
+
+
+def adsorption_electronic_energy_table(
+    workflow: AdsorptionWorkflow, results: list[CalculationResult]
+) -> list[AdsorptionEnergyRow]:
+    return _adsorption_energy_table(
+        workflow,
+        results,
+        quantity="adsorption_electronic_energy",
+        energy_field="electronic_energy_hartree",
+        notes=(
+            "E_ads = E_slab+adsorbate - E_clean_slab - E_isolated_adsorbate. "
+            "No correction terms applied."
+        ),
+    )
+
+
+def adsorption_gibbs_free_energy_table(
+    workflow: AdsorptionWorkflow, results: list[CalculationResult]
+) -> list[AdsorptionEnergyRow]:
+    return _adsorption_energy_table(
+        workflow,
+        results,
+        quantity="adsorption_gibbs_free_energy",
+        energy_field="gibbs_free_energy_hartree",
+        notes=(
+            "G_ads = G_slab+adsorbate - G_clean_slab - G_isolated_adsorbate. "
+            "No correction terms applied."
+        ),
+    )
+
+
+def _adsorption_energy_table(
+    workflow: AdsorptionWorkflow,
+    results: list[CalculationResult],
+    *,
+    quantity: str,
+    energy_field: str,
+    notes: str,
+) -> list[AdsorptionEnergyRow]:
+    result_by_name = {result.species_name: result for result in results}
+    return [
+        _adsorption_energy_row(
+            system,
+            result_by_name,
+            quantity=quantity,
+            energy_field=energy_field,
+            notes=notes,
+        )
+        for system in workflow.adsorption_systems
+    ]
+
+
+def _adsorption_energy_row(
+    system: AdsorptionSystem,
+    result_by_name: dict[str, CalculationResult],
+    *,
+    quantity: str,
+    energy_field: str,
+    notes: str,
+) -> AdsorptionEnergyRow:
+    component_names = {
+        "slab": system.slab_result,
+        "adsorbate": system.adsorbate_result,
+        "combined": system.combined_result,
+    }
+    missing: list[str] = []
+    component_results: dict[str, CalculationResult] = {}
+    for role, result_name in component_names.items():
+        result = result_by_name.get(result_name)
+        if result is None:
+            missing.append(f"missing_result:{role}:{result_name}")
+            continue
+        component_results[role] = result
+        if getattr(result, energy_field) is None:
+            missing.append(f"missing_energy:{role}:{result_name}")
+
+    warnings = _method_consistency_warnings(component_results.values())
+    if missing:
+        return AdsorptionEnergyRow(
+            system_id=system.id,
+            quantity=quantity,
+            slab_result=system.slab_result,
+            adsorbate_result=system.adsorbate_result,
+            combined_result=system.combined_result,
+            adsorption_hartree=None,
+            adsorption_ev=None,
+            adsorption_kj_mol=None,
+            complete=False,
+            missing=tuple(missing),
+            warnings=tuple(warnings),
+            notes=system.notes or notes,
+        )
+
+    slab_energy = float(getattr(component_results["slab"], energy_field))
+    adsorbate_energy = float(getattr(component_results["adsorbate"], energy_field))
+    combined_energy = float(getattr(component_results["combined"], energy_field))
+    adsorption_hartree = combined_energy - slab_energy - adsorbate_energy
+    return AdsorptionEnergyRow(
+        system_id=system.id,
+        quantity=quantity,
+        slab_result=system.slab_result,
+        adsorbate_result=system.adsorbate_result,
+        combined_result=system.combined_result,
+        adsorption_hartree=adsorption_hartree,
+        adsorption_ev=adsorption_hartree * HARTREE_TO_EV,
+        adsorption_kj_mol=adsorption_hartree * HARTREE_TO_KJ_MOL,
+        complete=True,
+        missing=(),
+        warnings=tuple(warnings),
+        notes=system.notes or notes,
+    )
+
+
+def _method_consistency_warnings(results) -> list[str]:
+    result_list = list(results)
+    settings = {
+        (
+            result.backend,
+            result.method,
+            result.basis,
+            result.task,
+            result.metadata.get("solvent"),
+        )
+        for result in result_list
+    }
+    if len(settings) <= 1:
+        return []
+    return [
+        "Adsorption components use mixed backend/method/basis/task/solvent settings."
+    ]
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:

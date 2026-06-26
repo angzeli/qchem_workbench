@@ -3,8 +3,11 @@
 from qchem_workbench.analysis.adsorption import (
     ADSORPTION_SCHEMA_VERSION,
     AdsorptionCalculationRef,
+    AdsorptionEnergyRow,
     AdsorptionSystem,
     AdsorptionWorkflow,
+    adsorption_electronic_energy_table,
+    adsorption_gibbs_free_energy_table,
     load_adsorption_workflow,
 )
 from qchem_workbench.analysis.conformers import (
@@ -34,6 +37,7 @@ from qchem_workbench.analysis.result_matching import (
 __all__ = [
     "ADSORPTION_SCHEMA_VERSION",
     "AdsorptionCalculationRef",
+    "AdsorptionEnergyRow",
     "AdsorptionSystem",
     "AdsorptionWorkflow",
     "AmbiguousSpeciesMatch",
@@ -48,6 +52,8 @@ __all__ = [
     "ReactionEnergyRow",
     "ResultMatchReport",
     "SpeciesResultMatch",
+    "adsorption_electronic_energy_table",
+    "adsorption_gibbs_free_energy_table",
     "load_pathway",
     "load_adsorption_workflow",
     "match_results_to_species",
