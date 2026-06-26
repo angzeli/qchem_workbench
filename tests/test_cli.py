@@ -1075,6 +1075,53 @@ def test_reaction_table_missing_data(tmp_path):
     assert rows[0]["delta_hartree"] == ""
 
 
+def test_select_conformers_writes_json(tmp_path, capsys):
+    results_path = tmp_path / "results.json"
+    out_path = tmp_path / "selected_conformers.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="ethanol",
+                conformer_id="conf_001",
+                backend="gaussian",
+                method="b3lyp",
+                basis="def2-svp",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-10.0,
+            ),
+            CalculationResult(
+                species_name="ethanol",
+                conformer_id="conf_002",
+                backend="gaussian",
+                method="b3lyp",
+                basis="def2-svp",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-10.2,
+            ),
+        ],
+    )
+
+    exit_code = main(
+        [
+            "select-conformers",
+            str(results_path),
+            "--quantity",
+            "electronic",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert payload["selections"][0]["selected_conformer_id"] == "conf_002"
+    assert "ethanol\tconf_002" in captured.out
+
+
 def test_report_command_writes_markdown(tmp_path, capsys):
     project_path = tmp_path / "demo"
     assert main(["init", str(project_path), "--template", "basic"]) == 0

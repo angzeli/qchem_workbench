@@ -1,5 +1,11 @@
 """Analysis and quality-check utilities."""
 
+from qchem_workbench.analysis.conformers import (
+    ConformerSelection,
+    ConformerSelectionReport,
+    IncompleteConformerResult,
+    select_lowest_energy_conformers,
+)
 from qchem_workbench.analysis.quality_checks import QualityCheck, run_quality_checks
 from qchem_workbench.analysis.reactions import (
     HARTREE_TO_KJ_MOL,
@@ -20,7 +26,10 @@ from qchem_workbench.analysis.result_matching import (
 
 __all__ = [
     "AmbiguousSpeciesMatch",
+    "ConformerSelection",
+    "ConformerSelectionReport",
     "HARTREE_TO_KJ_MOL",
+    "IncompleteConformerResult",
     "PATHWAY_SCHEMA_VERSION",
     "Pathway",
     "QualityCheck",
@@ -33,4 +42,5 @@ __all__ = [
     "reaction_electronic_energy_table",
     "reaction_gibbs_free_energy_table",
     "run_quality_checks",
+    "select_lowest_energy_conformers",
 ]

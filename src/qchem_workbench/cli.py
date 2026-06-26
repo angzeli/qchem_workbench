@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from qchem_workbench import __version__
+from qchem_workbench.analysis.conformers import select_lowest_energy_conformers
 from qchem_workbench.analysis.quality_checks import QualityCheck, run_quality_checks
 from qchem_workbench.analysis.reactions import ReactionEnergyRow
 from qchem_workbench.analysis.reactions import load_pathway
@@ -199,6 +200,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reaction_table_parser.add_argument("--out", required=True, type=Path)
     reaction_table_parser.set_defaults(func=_reaction_table_command)
+
+    select_conformers_parser = subparsers.add_parser(
+        "select-conformers", help="select lowest-energy conformer results"
+    )
+    select_conformers_parser.add_argument("results", type=Path)
+    select_conformers_parser.add_argument(
+        "--quantity", required=True, choices=("electronic", "gibbs")
+    )
+    select_conformers_parser.add_argument("--out", required=True, type=Path)
+    select_conformers_parser.add_argument(
+        "--allow-mixed",
+        action="store_true",
+        help="allow comparison across mixed backend/method/basis/task settings",
+    )
+    select_conformers_parser.set_defaults(func=_select_conformers_command)
 
     report_parser = subparsers.add_parser(
         "report", help="generate a Markdown workflow report"
@@ -428,6 +444,38 @@ def _reaction_table_command(args: argparse.Namespace) -> int:
         print(
             f"{row.reaction_id}\t{row.quantity}\t{row.complete}\t"
             f"{delta_hartree}\t{';'.join(row.missing_species)}"
+        )
+    return 0
+
+
+def _select_conformers_command(args: argparse.Namespace) -> int:
+    try:
+        results = load_result_collection(args.results)
+        report = select_lowest_energy_conformers(
+            results,
+            args.quantity,
+            allow_mixed=args.allow_mixed,
+        )
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(
+            json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("species\tconformer\tenergy_hartree\twarnings")
+    for selection in report.selections:
+        energy = (
+            ""
+            if selection.selected_energy_hartree is None
+            else f"{selection.selected_energy_hartree:.12g}"
+        )
+        conformer_id = selection.selected_conformer_id or ""
+        print(
+            f"{selection.species_name}\t{conformer_id}\t{energy}\t"
+            f"{len(selection.warnings)}"
         )
     return 0
 
