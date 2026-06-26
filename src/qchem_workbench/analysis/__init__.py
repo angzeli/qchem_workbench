@@ -16,6 +16,15 @@ from qchem_workbench.analysis.conformers import (
     IncompleteConformerResult,
     select_lowest_energy_conformers,
 )
+from qchem_workbench.analysis.corrections import (
+    CORRECTION_TARGET_TYPES,
+    CorrectedEnergy,
+    CorrectionAttachment,
+    CorrectionTableRow,
+    CorrectionTerm,
+    apply_corrections,
+    attach_corrections,
+)
 from qchem_workbench.analysis.quality_checks import QualityCheck, run_quality_checks
 from qchem_workbench.analysis.reactions import (
     HARTREE_TO_KJ_MOL,
@@ -43,6 +52,11 @@ __all__ = [
     "AmbiguousSpeciesMatch",
     "ConformerSelection",
     "ConformerSelectionReport",
+    "CORRECTION_TARGET_TYPES",
+    "CorrectedEnergy",
+    "CorrectionAttachment",
+    "CorrectionTableRow",
+    "CorrectionTerm",
     "HARTREE_TO_KJ_MOL",
     "IncompleteConformerResult",
     "PATHWAY_SCHEMA_VERSION",
@@ -54,6 +68,8 @@ __all__ = [
     "SpeciesResultMatch",
     "adsorption_electronic_energy_table",
     "adsorption_gibbs_free_energy_table",
+    "apply_corrections",
+    "attach_corrections",
     "load_pathway",
     "load_adsorption_workflow",
     "match_results_to_species",
