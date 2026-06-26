@@ -21,6 +21,7 @@ The current workflow support focuses on:
 - ORCA input rendering and `.out` parsing without running ORCA.
 - Structure inspection/conversion and starting slab generation through optional
   ASE support.
+- Quantum ESPRESSO `pw.x` input rendering and output parsing without running QE.
 - Generic species, result, quality-check, reaction, report, and project
   manifest utilities.
 
@@ -85,6 +86,13 @@ Render and parse ORCA files without requiring ORCA during this workflow step:
 ```bash
 qchemwb render-orca demo/species.yaml --method b3lyp --basis def2-svp --task single_point --out demo/orca_inputs
 qchemwb parse-orca demo/outputs --out demo/results/orca_results.json
+```
+
+Render a QE `pw.x` input file after explicitly providing pseudopotentials,
+atomic masses, cutoffs, and a cell:
+
+```bash
+qchemwb render-qe demo/xyz/water.xyz --pseudo-map pseudos.yaml --ecutwfc 30 --cell 12 12 12 --gamma-only --out demo/qe_inputs/water.in
 ```
 
 Run quality checks and write a Markdown report:
@@ -184,6 +192,38 @@ qchemwb build-slab --element Cu --facet 111 --size 2 2 4 --vacuum 15 --out /tmp/
 Generated slabs are labelled as starting geometries requiring human inspection.
 They are not relaxed slabs, and qchem-workbench does not run DFT or ASE
 calculators.
+
+## Quantum ESPRESSO pw.x Input And Output
+
+QE support is currently limited to `pw.x` input rendering and output parsing.
+qchem-workbench does not execute QE and does not provide or choose
+pseudopotentials. Users must provide pseudopotential filenames explicitly in a
+YAML pseudo map, along with atomic masses needed by QE `ATOMIC_SPECIES`.
+
+Example pseudo map:
+
+```yaml
+pseudopotentials:
+  H: H.pbe.UPF
+atomic_masses:
+  H: 1.008
+```
+
+Render an input file:
+
+```bash
+qchemwb render-qe examples/basic_molecules/xyz/water.xyz --pseudo-map pseudos.yaml --ecutwfc 30 --cell 12 12 12 --gamma-only --out /tmp/water-qe.in
+```
+
+Parse QE-like output files:
+
+```bash
+qchemwb parse-qe /path/to/qe_outputs --out /tmp/qe-results.json --csv /tmp/qe-results.csv
+```
+
+Generated QE inputs are starting points for human inspection. Cutoffs,
+k-points, cells, pseudopotentials, smearing, and convergence settings are not
+guaranteed to be production-quality.
 
 ## Species Registry Format
 

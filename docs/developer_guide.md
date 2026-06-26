@@ -13,7 +13,8 @@ backend integrations:
   calculation, result, units, and registry models.
 - `qchem_workbench.backends`: backend protocol plus PySCF, Gaussian input,
   Gaussian parser, Gaussian scheduler-template helpers, ORCA input, and ORCA
-  parser helpers, plus optional ASE adapters and slab helpers.
+  parser helpers, QE `pw.x` input/parser helpers, plus optional ASE adapters and
+  slab helpers.
 - `qchem_workbench.analysis`: quality checks, result/species matching, and
   stoichiometric reaction-energy bookkeeping.
 - `qchem_workbench.results`: JSON result-store helpers.
@@ -158,6 +159,28 @@ Implemented parsing includes:
 
 ORCA execution remains external. The parser uses synthetic fixtures in tests and
 does not require ORCA in CI.
+
+## Quantum ESPRESSO pw.x Design
+
+`qchem_workbench.backends.qe_input` provides `QEInputSpec`, `QEKPoints`, and
+`render_qe_pw_input()` for QE `pw.x` input text. Rendering requires explicit
+pseudopotential filenames and atomic masses from user input. It does not choose
+pseudopotentials, cutoffs, k-points, or production settings.
+
+`qchem_workbench.backends.qe_parser.parse_qe_output()` reads QE-like `pw.x`
+output and returns a `CalculationResult`.
+
+Implemented parsing includes:
+
+- job completion marker;
+- SCF convergence status;
+- total energy converted to Hartree, with Ry/eV values in metadata;
+- number of atoms when printed;
+- cell parameters when printed in a simple `CELL_PARAMETERS` block;
+- maximum force when printed.
+
+QE execution remains external. Parser tests use synthetic QE-like fixtures and
+do not require a QE installation.
 
 ## ASE Integration
 

@@ -9,6 +9,7 @@ import pytest
 from qchem_workbench.backends.gaussian_parser import parse_gaussian_output
 from qchem_workbench.backends.orca_parser import parse_orca_output
 from qchem_workbench.backends.pyscf_backend import MissingOptionalDependencyError
+from qchem_workbench.backends.qe_parser import parse_qe_output
 from qchem_workbench.cli import main
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.registry import load_species_registry
@@ -1025,6 +1026,98 @@ def test_parse_orca_continues_on_parser_exception(tmp_path, monkeypatch):
     assert any(
         "synthetic ORCA parser failure" in result["warnings"][0]
         for result in failed
+    )
+
+
+def test_parse_qe_scans_recursively_and_writes_json(tmp_path):
+    outputs = tmp_path / "outputs"
+    nested = outputs / "nested"
+    nested.mkdir(parents=True)
+    (outputs / "cu.out").write_text(
+        "     convergence has been achieved in 6 iterations\n"
+        "!    total energy              =     -114.000000 Ry\n"
+        "JOB DONE.\n",
+        encoding="utf-8",
+    )
+    (nested / "h2.pwout").write_text(
+        "     convergence has been achieved in 4 iterations\n"
+        "!    total energy              =     -2.000000 Ry\n"
+        "JOB DONE.\n",
+        encoding="utf-8",
+    )
+    (outputs / "ignore.log").write_text("not scanned by parse-qe\n", encoding="utf-8")
+    out_path = tmp_path / "results" / "qe_results.json"
+
+    exit_code = main(["parse-qe", str(outputs), "--out", str(out_path)])
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert payload["parser"] == "qe"
+    assert [result["species_name"] for result in payload["results"]] == [
+        "cu",
+        "h2",
+    ]
+    assert all(result["backend"] == "qe" for result in payload["results"])
+
+
+def test_parse_qe_writes_csv(tmp_path):
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    (outputs / "cu.out").write_text(
+        "     convergence has been achieved in 6 iterations\n"
+        "!    total energy              =     -114.000000 Ry\n"
+        "Maximum force = 0.001 Ry/bohr\n"
+        "JOB DONE.\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "results" / "qe_results.json"
+    csv_path = tmp_path / "results" / "qe_results.csv"
+
+    exit_code = main(
+        [
+            "parse-qe",
+            str(outputs),
+            "--out",
+            str(out_path),
+            "--csv",
+            str(csv_path),
+        ]
+    )
+
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert exit_code == 0
+    assert rows[0]["species_name"] == "cu"
+    assert rows[0]["electronic_energy_hartree"] == "-57.0"
+
+
+def test_parse_qe_continues_on_parser_exception(tmp_path, monkeypatch):
+    outputs = tmp_path / "outputs"
+    outputs.mkdir()
+    (outputs / "bad.out").write_text("synthetic malformed output\n", encoding="utf-8")
+    (outputs / "good.out").write_text(
+        "     convergence has been achieved in 4 iterations\n"
+        "!    total energy              =     -2.000000 Ry\n"
+        "JOB DONE.\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "results" / "qe_results.json"
+
+    def fake_parse(path):
+        if path.name == "bad.out":
+            raise ValueError("synthetic QE parser failure")
+        return parse_qe_output(path)
+
+    monkeypatch.setattr("qchem_workbench.cli.parse_qe_output", fake_parse)
+
+    exit_code = main(["parse-qe", str(outputs), "--out", str(out_path)])
+
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    failed = [result for result in payload["results"] if not result["success"]]
+    assert exit_code == 0
+    assert len(payload["results"]) == 2
+    assert any(
+        "synthetic QE parser failure" in result["warnings"][0] for result in failed
     )
 
 

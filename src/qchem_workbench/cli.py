@@ -51,6 +51,7 @@ from qchem_workbench.backends.qe_input import (
     QEInputSpec,
     render_qe_pw_input,
 )
+from qchem_workbench.backends.qe_parser import parse_qe_output
 from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.geometry import read_xyz_frames, write_xyz_frames
 from qchem_workbench.core.registry import load_species_registry
@@ -255,6 +256,14 @@ def build_parser() -> argparse.ArgumentParser:
     parse_orca_parser.add_argument("--out", required=True, type=Path)
     parse_orca_parser.add_argument("--csv", type=Path)
     parse_orca_parser.set_defaults(func=_parse_orca_command)
+
+    parse_qe_parser = subparsers.add_parser(
+        "parse-qe", help="parse Quantum ESPRESSO pw.x output files"
+    )
+    parse_qe_parser.add_argument("path", type=Path)
+    parse_qe_parser.add_argument("--out", required=True, type=Path)
+    parse_qe_parser.add_argument("--csv", type=Path)
+    parse_qe_parser.set_defaults(func=_parse_qe_command)
 
     check_results_parser = subparsers.add_parser(
         "check-results", help="run quality checks on a result collection"
@@ -567,6 +576,29 @@ def _parse_orca_command(args: argparse.Namespace) -> int:
         paths = _orca_output_paths(args.path)
         results = _parse_orca_outputs(paths)
         _write_parsed_result_collection(args.out, results, parser="orca")
+        if args.csv is not None:
+            _write_parsed_result_csv(args.csv, results)
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("file\tsuccess\telectronic_energy_hartree\twarnings")
+    for result in results:
+        source_path = result.source_path if result.source_path else ""
+        energy = (
+            ""
+            if result.electronic_energy_hartree is None
+            else f"{result.electronic_energy_hartree:.12g}"
+        )
+        print(f"{source_path}\t{result.success}\t{energy}\t{len(result.warnings)}")
+    return 0
+
+
+def _parse_qe_command(args: argparse.Namespace) -> int:
+    try:
+        paths = _qe_output_paths(args.path)
+        results = _parse_qe_outputs(paths)
+        _write_parsed_result_collection(args.out, results, parser="qe")
         if args.csv is not None:
             _write_parsed_result_csv(args.csv, results)
     except OSError as exc:
@@ -1305,6 +1337,41 @@ def _parse_orca_outputs(paths: list[Path]) -> list[CalculationResult]:
             result = CalculationResult(
                 species_name=path.stem,
                 backend="orca",
+                method=None,
+                basis=None,
+                task=None,
+                success=False,
+                warnings=[f"Parser raised exception: {exc}"],
+                metadata={"exception_type": type(exc).__name__},
+                source_path=path,
+            )
+        results.append(result)
+    return results
+
+
+def _qe_output_paths(path: Path) -> list[Path]:
+    target = Path(path)
+    qe_suffixes = {".out", ".pwout"}
+    if target.is_file():
+        return [target] if target.suffix.lower() in qe_suffixes else []
+    if not target.exists():
+        raise FileNotFoundError(f"{target} does not exist")
+    return sorted(
+        file_path
+        for file_path in target.rglob("*")
+        if file_path.is_file() and file_path.suffix.lower() in qe_suffixes
+    )
+
+
+def _parse_qe_outputs(paths: list[Path]) -> list[CalculationResult]:
+    results: list[CalculationResult] = []
+    for path in paths:
+        try:
+            result = parse_qe_output(path)
+        except Exception as exc:
+            result = CalculationResult(
+                species_name=path.stem,
+                backend="qe",
                 method=None,
                 basis=None,
                 task=None,
