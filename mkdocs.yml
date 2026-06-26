@@ -6,6 +6,7 @@ nav:
   - Installation: installation.md
   - Quickstart: quickstart.md
   - API Stability: api_stability.md
+  - v1 to v2 Migration: v1_to_v2_migration.md
   - Species Registry: species_registry.md
   - Backend Adapters: backend_adapters.md
   - Parsers: parsers.md
