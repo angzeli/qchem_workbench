@@ -16,6 +16,13 @@ from qchem_workbench.analysis.conformers import (
     IncompleteConformerResult,
     select_lowest_energy_conformers,
 )
+from qchem_workbench.analysis.che import (
+    CHE_SCHEMA_VERSION,
+    SUPPORTED_POTENTIAL_REFERENCES,
+    CHEPathway,
+    CHEReaction,
+    load_che_pathway,
+)
 from qchem_workbench.analysis.corrections import (
     CORRECTION_TARGET_TYPES,
     CorrectedEnergy,
@@ -53,6 +60,9 @@ __all__ = [
     "ConformerSelection",
     "ConformerSelectionReport",
     "CORRECTION_TARGET_TYPES",
+    "CHEPathway",
+    "CHEReaction",
+    "CHE_SCHEMA_VERSION",
     "CorrectedEnergy",
     "CorrectionAttachment",
     "CorrectionTableRow",
@@ -66,12 +76,14 @@ __all__ = [
     "ReactionEnergyRow",
     "ResultMatchReport",
     "SpeciesResultMatch",
+    "SUPPORTED_POTENTIAL_REFERENCES",
     "adsorption_electronic_energy_table",
     "adsorption_gibbs_free_energy_table",
     "apply_corrections",
     "attach_corrections",
     "load_pathway",
     "load_adsorption_workflow",
+    "load_che_pathway",
     "match_results_to_species",
     "reaction_electronic_energy_table",
     "reaction_gibbs_free_energy_table",
