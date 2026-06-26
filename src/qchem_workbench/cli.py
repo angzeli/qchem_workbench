@@ -32,7 +32,9 @@ from qchem_workbench.analysis.reactions import reaction_gibbs_free_energy_table
 from qchem_workbench.analysis.result_matching import match_results_to_species
 from qchem_workbench.analysis.screening import (
     build_descriptor_table,
+    rank_descriptor_rows,
     write_descriptor_table_csv,
+    write_ranked_candidates_csv,
 )
 from qchem_workbench.backends.ase_adapter import ASEUnavailableError, from_ase_atoms
 from qchem_workbench.backends.ase_adsorption import place_adsorbate_from_yaml
@@ -381,6 +383,14 @@ def build_parser() -> argparse.ArgumentParser:
     descriptor_table_parser.add_argument("results", type=Path)
     descriptor_table_parser.add_argument("--out", required=True, type=Path)
     descriptor_table_parser.set_defaults(func=_descriptor_table_command)
+
+    rank_candidates_parser = subparsers.add_parser(
+        "rank-candidates", help="rank screening candidates from descriptor CSV"
+    )
+    rank_candidates_parser.add_argument("campaign", type=Path)
+    rank_candidates_parser.add_argument("descriptors", type=Path)
+    rank_candidates_parser.add_argument("--out", required=True, type=Path)
+    rank_candidates_parser.set_defaults(func=_rank_candidates_command)
 
     run_project_parser = subparsers.add_parser(
         "run-project", help="run explicitly configured project manifest steps"
@@ -886,6 +896,29 @@ def _descriptor_table_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Wrote descriptor table for {len(table.rows)} candidate(s) to {args.out}.")
+    return 0
+
+
+def _rank_candidates_command(args: argparse.Namespace) -> int:
+    try:
+        campaign = load_campaign_manifest(args.campaign)
+        descriptor_rows, descriptor_headers = _read_dict_csv(args.descriptors)
+        table = rank_descriptor_rows(campaign, descriptor_rows, descriptor_headers)
+        write_ranked_candidates_csv(args.out, table)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    ranked_rows = [row for row in table.rows if row["rank_status"] == "ranked"]
+    print("rank\tcandidate_id\tscore")
+    for row in ranked_rows[:10]:
+        print(f"{row['rank']}\t{row.get('candidate_id', '')}\t{row['rank_score']}")
+    if not ranked_rows:
+        print("No ranked candidates.")
+    excluded_count = len(table.rows) - len(ranked_rows)
+    if excluded_count:
+        print(f"Excluded candidates\t{excluded_count}")
+    print(f"Wrote ranked candidates to {args.out}.")
     return 0
 
 
@@ -1621,6 +1654,15 @@ def _write_parsed_result_csv(path: Path, results: list[CalculationResult]) -> No
                     "warning_count": len(result.warnings),
                 }
             )
+
+
+def _read_dict_csv(path: Path) -> tuple[list[dict[str, str]], tuple[str, ...]]:
+    input_path = Path(path)
+    with input_path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames:
+            raise ValueError(f"{input_path}: CSV is missing headers")
+        return list(reader), tuple(reader.fieldnames)
 
 
 def _quality_checks_for_results(

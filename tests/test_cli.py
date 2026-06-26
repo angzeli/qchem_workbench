@@ -2060,6 +2060,118 @@ def test_descriptor_table_command_writes_csv(tmp_path, capsys):
     assert rows[0]["quality_flags"] == ""
 
 
+def test_rank_candidates_command_writes_ranked_csv(tmp_path, capsys):
+    campaign_path = _write_ranking_campaign(
+        tmp_path,
+        ranking=(
+            "      - descriptor: gap_ev\n"
+            "        direction: maximize\n"
+            "        weight: 2.0\n"
+        ),
+    )
+    descriptors_path = tmp_path / "descriptors.csv"
+    descriptors_path.write_text(
+        "candidate_id,gap_ev,quality_error_count\n"
+        "a,2.0,0\n"
+        "b,3.0,0\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "ranked.csv"
+
+    exit_code = main(
+        [
+            "rank-candidates",
+            str(campaign_path),
+            str(descriptors_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    with out_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert exit_code == 0
+    assert "rank\tcandidate_id\tscore" in captured.out
+    assert rows[0]["candidate_id"] == "b"
+    assert rows[0]["rank"] == "1"
+    assert rows[0]["rank_score"] == "6.0"
+    assert rows[0]["score_component_gap_ev"] == "6.0"
+
+
+def test_rank_candidates_command_filters_quality_errors(tmp_path, capsys):
+    campaign_path = _write_ranking_campaign(
+        tmp_path,
+        ranking=(
+            "      - descriptor: quality_error_count\n"
+            "        filter: exclude_quality_errors\n"
+            "      - descriptor: gap_ev\n"
+            "        direction: maximize\n"
+        ),
+    )
+    descriptors_path = tmp_path / "descriptors.csv"
+    descriptors_path.write_text(
+        "candidate_id,gap_ev,quality_error_count\n"
+        "a,2.0,0\n"
+        "b,3.0,1\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "ranked.csv"
+
+    exit_code = main(
+        [
+            "rank-candidates",
+            str(campaign_path),
+            str(descriptors_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    with out_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    excluded = {row["candidate_id"]: row for row in rows if row["rank_status"] == "excluded"}
+    assert exit_code == 0
+    assert "Excluded candidates\t1" in captured.out
+    assert excluded["b"]["ranking_reasons"] == "quality_errors_present"
+
+
+def test_rank_candidates_command_keeps_missing_values_unranked(tmp_path):
+    campaign_path = _write_ranking_campaign(
+        tmp_path,
+        ranking=(
+            "      - descriptor: gap_ev\n"
+            "        direction: maximize\n"
+        ),
+    )
+    descriptors_path = tmp_path / "descriptors.csv"
+    descriptors_path.write_text(
+        "candidate_id,gap_ev,quality_error_count\n"
+        "a,,0\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "ranked.csv"
+
+    exit_code = main(
+        [
+            "rank-candidates",
+            str(campaign_path),
+            str(descriptors_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    with out_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert exit_code == 0
+    assert rows[0]["rank"] == ""
+    assert rows[0]["rank_status"] == "excluded"
+    assert rows[0]["ranking_reasons"] == "missing_descriptor:gap_ev"
+    assert rows[0]["gap_ev"] == ""
+
+
 def test_run_project_renders_gaussian_inputs(tmp_path, capsys):
     project_path = tmp_path / "demo"
     assert main(["init", str(project_path), "--template", "basic"]) == 0
@@ -2204,3 +2316,27 @@ def test_triage_command_writes_failed_jobs_markdown(tmp_path, capsys):
     assert "missing_energy" in captured.out
     assert "# Failed job triage" in report
     assert "missing-energy" in report
+
+
+def _write_ranking_campaign(tmp_path, *, ranking: str):
+    campaign_path = tmp_path / "campaign.yaml"
+    campaign_path.write_text(
+        "schema_version: 1\n"
+        "campaign:\n"
+        "  name: demo\n"
+        "  results: results/results.json\n"
+        "  candidates:\n"
+        "    - id: a\n"
+        "      species: a\n"
+        "    - id: b\n"
+        "      species: b\n"
+        "  descriptors:\n"
+        "    - name: gap_ev\n"
+        "      source: result\n"
+        "      field: gap_ev\n"
+        "  ranking:\n"
+        "    rules:\n"
+        f"{ranking}",
+        encoding="utf-8",
+    )
+    return campaign_path
