@@ -1689,6 +1689,165 @@ def test_adsorption_table_csv_output_includes_units(tmp_path):
     assert "mixed backend/method" in rows[0]["warnings"]
 
 
+def _write_che_cli_fixture(tmp_path, extra_fields: str = ""):
+    path = tmp_path / "che_pathway.yaml"
+    path.write_text(
+        "schema_version: 1\n"
+        "reactions:\n"
+        "  - id: r1\n"
+        "    reactants: {A: 1}\n"
+        "    products: {B: 1}\n"
+        f"{extra_fields}",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_che_cli_results(results_path, include_b: bool = True) -> None:
+    results = [
+        CalculationResult(
+            species_name="A",
+            backend="gaussian",
+            method="b3lyp",
+            basis="def2-svp",
+            task="freq",
+            success=True,
+            gibbs_free_energy_hartree=-2.0,
+        )
+    ]
+    if include_b:
+        results.append(
+            CalculationResult(
+                species_name="B",
+                backend="gaussian",
+                method="b3lyp",
+                basis="def2-svp",
+                task="freq",
+                success=True,
+                gibbs_free_energy_hartree=-1.9,
+            )
+        )
+    save_result_collection(results_path, results)
+
+
+def test_che_table_basic(tmp_path, capsys):
+    pathway_path = _write_che_cli_fixture(tmp_path)
+    results_path = tmp_path / "results.json"
+    _write_che_cli_results(results_path)
+    out_path = tmp_path / "che_table.csv"
+
+    exit_code = main(
+        [
+            "che-table",
+            str(pathway_path),
+            str(results_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert "corrected_delta_g_ev" in captured.out
+    assert rows[0]["reaction_id"] == "r1"
+    assert rows[0]["complete"] == "True"
+    assert rows[0]["corrected_delta_g_ev"] == rows[0]["uncorrected_delta_g_ev"]
+
+
+def test_che_table_shows_correction_terms(tmp_path):
+    pathway_path = _write_che_cli_fixture(
+        tmp_path,
+        "    proton_electron_pairs: 1\n"
+        "    potential_V: 0.5\n"
+        "    potential_reference: SHE\n"
+        "    correction_terms:\n"
+        "      - label: user supplied term\n"
+        "        value_eV: 0.1\n"
+        "        sign_convention: added to uncorrected delta G\n"
+        "        source: synthetic fixture table\n",
+    )
+    results_path = tmp_path / "results.json"
+    _write_che_cli_results(results_path)
+    out_path = tmp_path / "che_table.csv"
+
+    exit_code = main(
+        [
+            "che-table",
+            str(pathway_path),
+            str(results_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert "user supplied term=0.1 eV" in rows[0]["correction_terms"]
+    assert "CHE potential correction=-0.5 eV" in rows[0]["correction_terms"]
+    assert float(rows[0]["correction_total_eV"]) == pytest.approx(-0.4)
+
+
+def test_che_table_missing_data(tmp_path):
+    pathway_path = _write_che_cli_fixture(
+        tmp_path,
+        "    proton_electron_pairs: 1\n"
+        "    potential_V: 0.5\n"
+        "    potential_reference: SHE\n",
+    )
+    results_path = tmp_path / "results.json"
+    _write_che_cli_results(results_path, include_b=False)
+    out_path = tmp_path / "che_table.csv"
+
+    exit_code = main(
+        [
+            "che-table",
+            str(pathway_path),
+            str(results_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert rows[0]["complete"] == "False"
+    assert rows[0]["missing_species"] == "B"
+    assert rows[0]["corrected_delta_g_ev"] == ""
+    assert rows[0]["correction_total_eV"] == "-0.5"
+
+
+def test_che_table_csv_output_has_units(tmp_path):
+    pathway_path = _write_che_cli_fixture(
+        tmp_path,
+        "    proton_electron_pairs: 1\n"
+        "    pH: 7\n",
+    )
+    results_path = tmp_path / "results.json"
+    _write_che_cli_results(results_path)
+    out_path = tmp_path / "che_table.csv"
+
+    exit_code = main(
+        [
+            "che-table",
+            str(pathway_path),
+            str(results_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert {
+        "uncorrected_delta_g_ev",
+        "correction_total_eV",
+        "corrected_delta_g_ev",
+        "corrected_delta_g_kj_mol",
+    }.issubset(rows[0])
+    assert "CHE pH correction" in rows[0]["correction_terms"]
+
+
 def test_select_conformers_writes_json(tmp_path, capsys):
     results_path = tmp_path / "results.json"
     out_path = tmp_path / "selected_conformers.json"

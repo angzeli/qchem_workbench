@@ -18,6 +18,11 @@ from qchem_workbench.analysis.adsorption import (
     adsorption_gibbs_free_energy_table,
     load_adsorption_workflow,
 )
+from qchem_workbench.analysis.che import (
+    CHEFreeEnergyRow,
+    che_free_energy_table,
+    load_che_pathway,
+)
 from qchem_workbench.analysis.conformers import select_lowest_energy_conformers
 from qchem_workbench.analysis.quality_checks import QualityCheck, run_quality_checks
 from qchem_workbench.analysis.reactions import ReactionEnergyRow
@@ -311,6 +316,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     adsorption_table_parser.add_argument("--out", required=True, type=Path)
     adsorption_table_parser.set_defaults(func=_adsorption_table_command)
+
+    che_table_parser = subparsers.add_parser(
+        "che-table", help="compute transparent CHE-style free-energy tables"
+    )
+    che_table_parser.add_argument("pathway", type=Path)
+    che_table_parser.add_argument("results", type=Path)
+    che_table_parser.add_argument("--out", required=True, type=Path)
+    che_table_parser.set_defaults(func=_che_table_command)
 
     select_conformers_parser = subparsers.add_parser(
         "select-conformers", help="select lowest-energy conformer results"
@@ -713,6 +726,35 @@ def _adsorption_table_command(args: argparse.Namespace) -> int:
         print(
             f"{row.system_id}\t{row.quantity}\t{row.complete}\t"
             f"{energy}\t{';'.join(row.missing)}"
+        )
+    return 0
+
+
+def _che_table_command(args: argparse.Namespace) -> int:
+    try:
+        pathway = load_che_pathway(args.pathway)
+        results = load_result_collection(args.results)
+        rows = che_free_energy_table(pathway, results)
+        _write_che_table_csv(args.out, rows)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("reaction_id\tcomplete\tuncorrected_delta_g_ev\tcorrected_delta_g_ev\tmissing")
+    for row in rows:
+        uncorrected = (
+            ""
+            if row.uncorrected_delta_g_ev is None
+            else f"{row.uncorrected_delta_g_ev:.12g}"
+        )
+        corrected = (
+            ""
+            if row.corrected_delta_g_ev is None
+            else f"{row.corrected_delta_g_ev:.12g}"
+        )
+        print(
+            f"{row.reaction_id}\t{row.complete}\t{uncorrected}\t"
+            f"{corrected}\t{';'.join(row.missing_species)}"
         )
     return 0
 
@@ -1673,3 +1715,54 @@ def _write_adsorption_table_csv(path: Path, rows: list[AdsorptionEnergyRow]) -> 
                     "notes": row.notes,
                 }
             )
+
+
+def _write_che_table_csv(path: Path, rows: list[CHEFreeEnergyRow]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "reaction_id",
+                "label",
+                "complete",
+                "uncorrected_delta_g_hartree",
+                "uncorrected_delta_g_ev",
+                "correction_total_eV",
+                "corrected_delta_g_ev",
+                "corrected_delta_g_kj_mol",
+                "correction_terms",
+                "missing_species",
+                "warnings",
+                "notes",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "reaction_id": row.reaction_id,
+                    "label": row.label,
+                    "complete": row.complete,
+                    "uncorrected_delta_g_hartree": row.uncorrected_delta_g_hartree,
+                    "uncorrected_delta_g_ev": row.uncorrected_delta_g_ev,
+                    "correction_total_eV": row.correction_total_eV,
+                    "corrected_delta_g_ev": row.corrected_delta_g_ev,
+                    "corrected_delta_g_kj_mol": row.corrected_delta_g_kj_mol,
+                    "correction_terms": _format_che_correction_terms(row),
+                    "missing_species": ";".join(row.missing_species),
+                    "warnings": ";".join(row.warnings),
+                    "notes": row.notes,
+                }
+            )
+
+
+def _format_che_correction_terms(row: CHEFreeEnergyRow) -> str:
+    return ";".join(
+        (
+            f"{term.label}={term.value_eV:.12g} eV"
+            f" ({term.sign_convention}; source={term.source or 'N/A'}"
+            f"; note={term.note or 'N/A'})"
+        )
+        for term in row.correction_terms
+    )
