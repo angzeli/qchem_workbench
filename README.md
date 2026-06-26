@@ -26,6 +26,8 @@ The current workflow support focuses on:
   manifest utilities.
 - Generic adsorption-energy and CHE-style electrochemical bookkeeping with
   explicit, user-visible correction terms.
+- Screening campaign manifests, descriptor tables, and transparent rule-based
+  rankings. These are workflow tables, not activity predictions.
 
 CO2RR is included as the first domain example, not as the scope of the package.
 Core modules remain generic and backend-agnostic.
@@ -50,6 +52,12 @@ For optional ASE structure conversion and slab helpers:
 pip install -e ".[ase]"
 ```
 
+For documentation builds:
+
+```bash
+pip install -e ".[docs]"
+```
+
 Run the test suite:
 
 ```bash
@@ -60,6 +68,12 @@ Show CLI help:
 
 ```bash
 qchemwb --help
+```
+
+Build the documentation site when the docs extra is installed:
+
+```bash
+python -m mkdocs build --strict
 ```
 
 ## Quickstart
@@ -109,6 +123,12 @@ Inspect and convert simple XYZ structures without ASE:
 ```bash
 qchemwb inspect-structure demo/xyz/water.xyz
 qchemwb convert-structure demo/xyz/water.xyz /tmp/water-copy.xyz
+```
+
+Inspect backend adapter capabilities:
+
+```bash
+qchemwb backends
 ```
 
 ## PySCF Backend
@@ -225,7 +245,7 @@ qchemwb parse-qe /path/to/qe_outputs --out /tmp/qe-results.json --csv /tmp/qe-re
 
 Generated QE inputs are starting points for human inspection. Cutoffs,
 k-points, cells, pseudopotentials, smearing, and convergence settings are not
-guaranteed to be production-quality.
+guaranteed to be suitable for production calculations.
 
 ## Species Registry Format
 
@@ -256,6 +276,7 @@ is `1` for:
 - result collections;
 - pathway files;
 - project manifests.
+- campaign manifests.
 
 Missing `schema_version` fields and unsupported schema versions are rejected
 with clear errors. qchem-workbench does not silently reinterpret unknown schema
@@ -347,6 +368,21 @@ The built-in bookkeeping terms use documented sign conventions:
 responsible for deciding whether those conventions and references fit their
 workflow. See `docs/electrochemistry.md`.
 
+## Screening Campaigns
+
+Campaign manifests define candidate IDs, descriptor columns, result paths, and
+explicit ranking rules:
+
+```bash
+qchemwb descriptor-table examples/screening_campaign/campaign.yaml examples/screening_campaign/results.json --out /tmp/qchemwb-descriptors.csv
+qchemwb rank-candidates examples/screening_campaign/campaign.yaml /tmp/qchemwb-descriptors.csv --out /tmp/qchemwb-ranked.csv
+```
+
+Descriptor values are extracted or calculated from stored results and analysis
+tables. Missing descriptor values remain missing. Ranking outputs include
+visible score components and exclusion reasons; they are not predictions of
+activity, selectivity, or experimental behavior.
+
 ## Quality Checks And Triage
 
 Quality checks are conservative and generic:
@@ -406,6 +442,18 @@ scientific data.
 Basic molecule tutorial:
 
 - `examples/basic_molecules/`
+
+Parser fixture examples:
+
+- `examples/gaussian_parsing/`
+- `examples/orca_parsing/`
+- `examples/qe_parsing/`
+
+Surface, CHE, and screening examples:
+
+- `examples/surface_adsorption/`
+- `examples/che_analysis/`
+- `examples/screening_campaign/`
 
 Generic pathway example:
 

@@ -6,8 +6,8 @@ hidden correction terms or infer mechanisms.
 Implemented workflows include:
 
 - reaction energy tables from explicit pathway stoichiometry;
-- adsorption energy tables from clean slab, isolated adsorbate, and combined
-  slab+adsorbate result labels;
+- adsorption energy or adsorption free-energy tables from clean slab, isolated
+  adsorbate, and combined slab+adsorbate result labels;
 - CHE-style free-energy tables from explicit Gibbs free energies and explicit
   pH, potential, and correction terms;
 - conformer selection by a chosen electronic or Gibbs energy field.

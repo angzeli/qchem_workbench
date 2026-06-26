@@ -4,8 +4,8 @@ This example demonstrates transparent CHE-style bookkeeping with synthetic
 Gibbs free energies. Users are responsible for references, corrections, pH,
 potential conventions, and scientific interpretation.
 
-The values in this directory are synthetic and are not experimental or
-production computational results.
+The values in this directory are synthetic and are not experimental results or
+production-quality computational results.
 
 Example command:
 

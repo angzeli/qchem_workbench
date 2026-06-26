@@ -275,14 +275,14 @@ def _adsorption_energy_table(rows: list[AdsorptionEnergyRow]) -> str:
         )
         for row in rows
     ]
-    return "## Adsorption energy table\n\n" + _markdown_table(
+    return "## Adsorption energy/free-energy table\n\n" + _markdown_table(
         [
             "System ID",
             "Quantity",
             "Complete",
-            "Adsorption energy (Hartree)",
-            "Adsorption energy (eV)",
-            "Adsorption energy (kJ/mol)",
+            "Adsorption energy/free energy (Hartree)",
+            "Adsorption energy/free energy (eV)",
+            "Adsorption energy/free energy (kJ/mol)",
             "Missing data",
             "Warnings",
             "Notes",

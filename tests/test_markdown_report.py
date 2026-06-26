@@ -283,8 +283,8 @@ def test_markdown_report_includes_adsorption_table(tmp_path):
     report = generate_markdown_report(results, adsorption_rows=rows)
 
     assert "## Adsorption system summary" in report
-    assert "## Adsorption energy table" in report
-    assert "Adsorption energy (eV)" in report
+    assert "## Adsorption energy/free-energy table" in report
+    assert "Adsorption energy/free energy (eV)" in report
     assert "slab_co.out" in report
     assert "| co_on_surface | adsorption_electronic_energy | True |" in report
 

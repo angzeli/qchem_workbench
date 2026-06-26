@@ -52,6 +52,9 @@ Use this checklist before tagging or publishing a qchem-workbench release.
   licensed quantum-chemistry software.
 - Confirm domain examples, including CO2RR, are labelled as illustrative when
   they are not complete mechanisms.
+- Confirm adsorption energy and adsorption free-energy wording remains distinct.
+- Confirm campaign rankings are described as explicit rule-based workflow
+  tables, not activity predictions.
 
 ## Changelog Update
 

@@ -9,6 +9,8 @@ expert review.
 - It does not invent thermochemical corrections or missing parsed values.
 - It does not infer reaction mechanisms, adsorption sites, catalytic activity,
   selectivity, or experimental validation.
+- It does not treat rule-based screening rankings as predictions of activity or
+  experimental performance.
 - It keeps electronic energies, Gibbs free energies, correction terms,
   adsorption energies, and CHE-corrected free energies explicitly separated.
 

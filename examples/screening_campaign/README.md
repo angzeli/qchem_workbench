@@ -2,7 +2,8 @@
 
 This example demonstrates campaign descriptors and transparent rule-based
 ranking. It is workflow management only: descriptors are extracted values, not
-predictions, and the ranking is not a claim of real performance.
+predictions, and the ranking is not a claim of real-world performance or
+experimental behavior.
 
 The result values are synthetic.
 

@@ -13,7 +13,7 @@ Render Gaussian inputs without running Gaussian:
 qchemwb render-gaussian demo/species.yaml --method wb97xd --basis 6-31g --task single_point --out demo/gaussian_inputs
 ```
 
-Parse synthetic or real text outputs into a result store:
+Parse committed parser fixtures or user-provided output text into a result store:
 
 ```bash
 qchemwb parse-gaussian demo/outputs --out demo/results/gaussian_results.json

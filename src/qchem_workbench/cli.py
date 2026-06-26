@@ -325,7 +325,7 @@ def build_parser() -> argparse.ArgumentParser:
     check_results_parser.set_defaults(func=_check_results_command)
 
     reaction_table_parser = subparsers.add_parser(
-        "reaction-table", help="compute generic reaction dE/dG tables"
+        "reaction-table", help="compute generic reaction electronic/Gibbs tables"
     )
     reaction_table_parser.add_argument("pathway", type=Path)
     reaction_table_parser.add_argument("results", type=Path)
@@ -336,7 +336,7 @@ def build_parser() -> argparse.ArgumentParser:
     reaction_table_parser.set_defaults(func=_reaction_table_command)
 
     adsorption_table_parser = subparsers.add_parser(
-        "adsorption-table", help="compute generic adsorption energy tables"
+        "adsorption-table", help="compute generic adsorption energy/free-energy tables"
     )
     adsorption_table_parser.add_argument("adsorption", type=Path)
     adsorption_table_parser.add_argument("results", type=Path)
@@ -406,7 +406,7 @@ def build_parser() -> argparse.ArgumentParser:
     descriptor_table_parser.set_defaults(func=_descriptor_table_command)
 
     rank_candidates_parser = subparsers.add_parser(
-        "rank-candidates", help="rank screening candidates from descriptor CSV"
+        "rank-candidates", help="apply explicit ranking rules to descriptor CSV"
     )
     rank_candidates_parser.add_argument("campaign", type=Path)
     rank_candidates_parser.add_argument("descriptors", type=Path)
@@ -805,7 +805,7 @@ def _adsorption_table_command(args: argparse.Namespace) -> int:
         return 1
 
     print(
-        "system_id\tquantity\tcomplete\tadsorption_energy_hartree\tmissing"
+        "system_id\tquantity\tcomplete\tadsorption_value_hartree\tmissing"
     )
     for row in rows:
         energy = (
