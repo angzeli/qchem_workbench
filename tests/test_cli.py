@@ -197,6 +197,148 @@ def test_build_slab_cli_when_ase_available(tmp_path, capsys):
     assert "not relaxed" in captured.out
 
 
+def test_render_qe_from_fixture_structure(tmp_path, capsys):
+    structure_path = tmp_path / "h2.xyz"
+    structure_path.write_text(
+        "2\n"
+        "synthetic fixture hydrogen molecule in box\n"
+        "H 0 0 0\n"
+        "H 0 0 0.74\n",
+        encoding="utf-8",
+    )
+    pseudo_map = tmp_path / "pseudos.yaml"
+    pseudo_map.write_text(
+        "pseudopotentials:\n"
+        "  H: H.pbe.UPF\n"
+        "atomic_masses:\n"
+        "  H: 1.008\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "qe_inputs" / "h2.in"
+
+    exit_code = main(
+        [
+            "render-qe",
+            str(structure_path),
+            "--pseudo-map",
+            str(pseudo_map),
+            "--out",
+            str(out_path),
+            "--ecutwfc",
+            "30",
+            "--cell",
+            "12",
+            "12",
+            "12",
+            "--gamma-only",
+        ]
+    )
+
+    rendered = out_path.read_text(encoding="utf-8")
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "ATOMIC_SPECIES\nH 1.008 H.pbe.UPF\n" in rendered
+    assert "CELL_PARAMETERS angstrom\n12 0 0\n0 12 0\n0 0 12\n" in rendered
+    assert rendered.endswith("K_POINTS gamma\n")
+    assert "Inspect pseudopotentials" in captured.out
+
+
+def test_render_qe_missing_pseudo_map(tmp_path, capsys):
+    structure_path = tmp_path / "h.xyz"
+    structure_path.write_text(
+        "1\nsynthetic fixture hydrogen atom\nH 0 0 0\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "render-qe",
+            str(structure_path),
+            "--pseudo-map",
+            str(tmp_path / "missing.yaml"),
+            "--out",
+            str(tmp_path / "h.in"),
+            "--ecutwfc",
+            "30",
+            "--cell",
+            "10",
+            "10",
+            "10",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "missing.yaml" in captured.err
+
+
+def test_render_qe_options_appear_in_output(tmp_path):
+    structure_path = tmp_path / "cu.xyz"
+    structure_path.write_text(
+        "1\nsynthetic fixture copper cell\nCu 0 0 0\n",
+        encoding="utf-8",
+    )
+    pseudo_map = tmp_path / "pseudos.yaml"
+    pseudo_map.write_text(
+        "Cu:\n"
+        "  pseudo: Cu.pbe.UPF\n"
+        "  mass: 63.546\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "cu.in"
+
+    exit_code = main(
+        [
+            "render-qe",
+            str(structure_path),
+            "--pseudo-map",
+            str(pseudo_map),
+            "--out",
+            str(out_path),
+            "--calculation",
+            "relax",
+            "--prefix",
+            "cu-demo",
+            "--pseudo-dir",
+            "/pseudos",
+            "--outdir",
+            "/scratch/qe",
+            "--ecutwfc",
+            "40",
+            "--ecutrho",
+            "320",
+            "--occupations",
+            "smearing",
+            "--smearing",
+            "mp",
+            "--degauss",
+            "0.02",
+            "--k-points",
+            "2",
+            "2",
+            "1",
+            "--cell",
+            "3.6",
+            "3.6",
+            "10",
+            "--periodic",
+        ]
+    )
+
+    rendered = out_path.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "  calculation = 'relax'," in rendered
+    assert "  prefix = 'cu-demo'," in rendered
+    assert "  pseudo_dir = '/pseudos'," in rendered
+    assert "  outdir = '/scratch/qe'," in rendered
+    assert "  ecutrho = 320," in rendered
+    assert "  occupations = 'smearing'," in rendered
+    assert "  smearing = 'mp'," in rendered
+    assert "  degauss = 0.02," in rendered
+    assert "&IONS\n/\n" in rendered
+    assert "K_POINTS automatic\n2 2 1 0 0 0\n" in rendered
+
+
 def test_init_refuses_to_overwrite_without_force(tmp_path):
     project_path = tmp_path / "demo"
     assert main(["init", str(project_path), "--template", "blank"]) == 0

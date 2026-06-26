@@ -9,6 +9,8 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 from qchem_workbench import __version__
 from qchem_workbench.analysis.conformers import select_lowest_energy_conformers
 from qchem_workbench.analysis.quality_checks import QualityCheck, run_quality_checks
@@ -43,6 +45,11 @@ from qchem_workbench.backends.orca_parser import parse_orca_output
 from qchem_workbench.backends.pyscf_backend import (
     MissingOptionalDependencyError,
     PySCFBackend,
+)
+from qchem_workbench.backends.qe_input import (
+    QEKPoints,
+    QEInputSpec,
+    render_qe_pw_input,
 )
 from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.geometry import read_xyz_frames, write_xyz_frames
@@ -125,6 +132,42 @@ def build_parser() -> argparse.ArgumentParser:
     build_slab_parser.add_argument("--vacuum", required=True, type=float)
     build_slab_parser.add_argument("--out", required=True, type=Path)
     build_slab_parser.set_defaults(func=_build_slab_command)
+
+    render_qe_parser = subparsers.add_parser(
+        "render-qe", help="render a Quantum ESPRESSO pw.x input file"
+    )
+    render_qe_parser.add_argument("structure", type=Path)
+    render_qe_parser.add_argument("--pseudo-map", required=True, type=Path)
+    render_qe_parser.add_argument("--out", required=True, type=Path)
+    render_qe_parser.add_argument("--calculation", default="scf")
+    render_qe_parser.add_argument("--prefix")
+    render_qe_parser.add_argument("--pseudo-dir", default="./pseudos")
+    render_qe_parser.add_argument("--outdir", default="./tmp")
+    render_qe_parser.add_argument("--ecutwfc", required=True, type=float)
+    render_qe_parser.add_argument("--ecutrho", type=float)
+    render_qe_parser.add_argument("--occupations")
+    render_qe_parser.add_argument("--smearing")
+    render_qe_parser.add_argument("--degauss", type=float)
+    render_qe_parser.add_argument("--k-points", nargs=3, type=int, default=(1, 1, 1))
+    render_qe_parser.add_argument("--k-shift", nargs=3, type=int, default=(0, 0, 0))
+    render_qe_parser.add_argument(
+        "--gamma-only",
+        action="store_true",
+        help="render K_POINTS gamma instead of automatic k-point grid",
+    )
+    render_qe_parser.add_argument(
+        "--cell",
+        nargs=3,
+        type=float,
+        metavar=("A", "B", "C"),
+        help="orthorhombic cell lengths in angstrom for structures without a cell",
+    )
+    render_qe_parser.add_argument(
+        "--periodic",
+        action="store_true",
+        help="mark the structure periodic in all three directions",
+    )
+    render_qe_parser.set_defaults(func=_render_qe_command)
 
     run_pyscf_parser = subparsers.add_parser(
         "run-pyscf", help="run PySCF single-point calculations"
@@ -360,6 +403,51 @@ def _build_slab_command(args: argparse.Namespace) -> int:
     print(f"Wrote starting slab to {args.out}.")
     print(f"atoms\t{len(structure.atoms)}")
     print(f"warning\t{structure.metadata['warning']}")
+    return 0
+
+
+def _render_qe_command(args: argparse.Namespace) -> int:
+    try:
+        structures = _read_structure_file(args.structure)
+        if len(structures) != 1:
+            raise ValueError("render-qe requires a single-frame structure file")
+        structure = _structure_with_cli_cell(
+            structures[0],
+            args.cell,
+            periodic=args.periodic,
+        )
+        pseudopotentials, atomic_masses = _load_qe_pseudo_map(args.pseudo_map)
+        k_points = (
+            QEKPoints(mode="gamma")
+            if args.gamma_only
+            else QEKPoints(grid=tuple(args.k_points), shift=tuple(args.k_shift))
+        )
+        spec = QEInputSpec(
+            calculation=args.calculation,
+            prefix=args.prefix or args.structure.stem,
+            pseudo_dir=args.pseudo_dir,
+            outdir=args.outdir,
+            ecutwfc=args.ecutwfc,
+            ecutrho=args.ecutrho,
+            occupations=args.occupations,
+            smearing=args.smearing,
+            degauss=args.degauss,
+            k_points=k_points,
+            pseudopotentials=pseudopotentials,
+            atomic_masses=atomic_masses,
+        )
+        rendered = render_qe_pw_input(structure, spec)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(rendered, encoding="utf-8")
+    except (OSError, ValueError, ASEUnavailableError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote QE pw.x input to {args.out}.")
+    print(
+        "warning\tInspect pseudopotentials, cutoffs, k-points, cell, and "
+        "calculation settings before production use."
+    )
     return 0
 
 
@@ -687,6 +775,62 @@ def _read_structure_file(path: Path) -> list[AtomisticStructure]:
     if not isinstance(frames, list):
         frames = [frames]
     return [from_ase_atoms(frame) for frame in frames]
+
+
+def _structure_with_cli_cell(
+    structure: AtomisticStructure,
+    cell_lengths: list[float] | None,
+    *,
+    periodic: bool,
+) -> AtomisticStructure:
+    cell = structure.cell
+    if cell_lengths is not None:
+        a, b, c = cell_lengths
+        if a <= 0 or b <= 0 or c <= 0:
+            raise ValueError("--cell lengths must be positive")
+        cell = ((a, 0.0, 0.0), (0.0, b, 0.0), (0.0, 0.0, c))
+    pbc = (True, True, True) if periodic else structure.pbc
+    return AtomisticStructure(
+        atoms=structure.atoms,
+        cell=cell,
+        pbc=pbc,
+        charge=structure.charge,
+        multiplicity=structure.multiplicity,
+        metadata=structure.metadata,
+    )
+
+
+def _load_qe_pseudo_map(path: Path) -> tuple[dict[str, str], dict[str, float]]:
+    pseudo_path = Path(path)
+    data = yaml.safe_load(pseudo_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{pseudo_path}: QE pseudo map must be a mapping")
+
+    if "pseudopotentials" in data or "atomic_masses" in data:
+        pseudopotentials = data.get("pseudopotentials", {})
+        atomic_masses = data.get("atomic_masses", {})
+        if not isinstance(pseudopotentials, dict):
+            raise ValueError(f"{pseudo_path}: pseudopotentials must be a mapping")
+        if not isinstance(atomic_masses, dict):
+            raise ValueError(f"{pseudo_path}: atomic_masses must be a mapping")
+        return dict(pseudopotentials), dict(atomic_masses)
+
+    pseudopotentials: dict[str, str] = {}
+    atomic_masses: dict[str, float] = {}
+    for element, entry in data.items():
+        if not isinstance(element, str):
+            raise ValueError(f"{pseudo_path}: element keys must be strings")
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"{pseudo_path}: element {element!r} must map to pseudo and mass"
+            )
+        if "pseudo" not in entry or "mass" not in entry:
+            raise ValueError(
+                f"{pseudo_path}: element {element!r} requires pseudo and mass"
+            )
+        pseudopotentials[element] = entry["pseudo"]
+        atomic_masses[element] = entry["mass"]
+    return pseudopotentials, atomic_masses
 
 
 def _convert_structure_file(input_path: Path, output_path: Path) -> None:
