@@ -56,6 +56,16 @@ def generate_markdown_report(
     if adsorption_row_list:
         sections.append(_adsorption_system_summary(adsorption_row_list, result_list))
         sections.append(_adsorption_energy_table(adsorption_row_list))
+    if _has_vibrational_data(result_list):
+        sections.append(_vibrational_summary(result_list))
+    if _has_imaginary_frequencies(result_list):
+        sections.append(_imaginary_frequency_summary(result_list))
+    if _has_excitation_data(result_list):
+        sections.append(_excitation_summary(result_list))
+    if _has_orbital_data(result_list):
+        sections.append(_orbital_summary(result_list))
+    if _property_plot_rows(result_list):
+        sections.append(_property_plot_links(result_list))
     sections.append(
         _method_provenance_summary(
             result_list,
@@ -279,6 +289,173 @@ def _adsorption_energy_table(rows: list[AdsorptionEnergyRow]) -> str:
         ],
         table_rows,
     )
+
+
+def _has_vibrational_data(results: list[CalculationResult]) -> bool:
+    return any(
+        mode.frequency_cm1 is not None
+        for result in results
+        for mode in result.properties.vibrational_modes
+    )
+
+
+def _has_imaginary_frequencies(results: list[CalculationResult]) -> bool:
+    return any(
+        _is_imaginary_mode(mode)
+        for result in results
+        for mode in result.properties.vibrational_modes
+    )
+
+
+def _has_excitation_data(results: list[CalculationResult]) -> bool:
+    return any(result.properties.excitations for result in results)
+
+
+def _has_orbital_data(results: list[CalculationResult]) -> bool:
+    return any(
+        result.homo_ev is not None
+        or result.lumo_ev is not None
+        or result.gap_ev is not None
+        for result in results
+    )
+
+
+def _vibrational_summary(results: list[CalculationResult]) -> str:
+    rows = []
+    for result in results:
+        modes = result.properties.vibrational_modes
+        frequencies = [
+            mode.frequency_cm1
+            for mode in modes
+            if mode.frequency_cm1 is not None
+        ]
+        if not frequencies:
+            continue
+        rows.append(
+            (
+                result.species_name,
+                len(frequencies),
+                _format_number(min(frequencies)),
+                _format_number(max(frequencies)),
+                sum(1 for mode in modes if _is_imaginary_mode(mode)),
+                sum(1 for mode in modes if mode.ir_intensity_km_mol is not None),
+                sum(
+                    1
+                    for mode in modes
+                    if mode.raman_activity_angstrom4_amu is not None
+                ),
+            )
+        )
+    return "## Vibrational summary\n\n" + _markdown_table(
+        [
+            "Species",
+            "Modes with frequencies",
+            "Min frequency (cm^-1)",
+            "Max frequency (cm^-1)",
+            "Imaginary modes",
+            "Modes with IR intensity (km/mol)",
+            "Modes with Raman activity (angstrom^4/amu)",
+        ],
+        rows,
+    )
+
+
+def _imaginary_frequency_summary(results: list[CalculationResult]) -> str:
+    rows = []
+    for result in results:
+        frequencies = [
+            mode.frequency_cm1
+            for mode in result.properties.vibrational_modes
+            if _is_imaginary_mode(mode) and mode.frequency_cm1 is not None
+        ]
+        if not frequencies:
+            continue
+        rows.append(
+            (
+                result.species_name,
+                len(frequencies),
+                _format_number(min(frequencies)),
+            )
+        )
+    return "## Imaginary-frequency summary\n\n" + _markdown_table(
+        ["Species", "Imaginary modes", "Most negative frequency (cm^-1)"],
+        rows,
+    )
+
+
+def _excitation_summary(results: list[CalculationResult]) -> str:
+    rows = [
+        (
+            result.species_name,
+            excitation.state_label,
+            _format_number(excitation.energy_ev),
+            _format_number(excitation.wavelength_nm),
+            _format_number(excitation.oscillator_strength),
+        )
+        for result in results
+        for excitation in result.properties.excitations
+    ]
+    return "## Excitation summary\n\n" + _markdown_table(
+        [
+            "Species",
+            "State",
+            "Excitation energy (eV)",
+            "Wavelength (nm)",
+            "Oscillator strength",
+        ],
+        rows,
+    )
+
+
+def _orbital_summary(results: list[CalculationResult]) -> str:
+    rows = [
+        (
+            result.species_name,
+            _format_number(result.homo_ev),
+            _format_number(result.lumo_ev),
+            _format_number(result.gap_ev),
+        )
+        for result in results
+        if (
+            result.homo_ev is not None
+            or result.lumo_ev is not None
+            or result.gap_ev is not None
+        )
+    ]
+    return "## Orbital summary\n\n" + _markdown_table(
+        ["Species", "HOMO (eV)", "LUMO (eV)", "Gap (eV)"],
+        rows,
+    )
+
+
+def _property_plot_links(results: list[CalculationResult]) -> str:
+    return "## Property plot links\n\n" + _markdown_table(
+        ["Species", "Plot type", "Path"],
+        _property_plot_rows(results),
+    )
+
+
+def _property_plot_rows(results: list[CalculationResult]) -> list[tuple[str, str, str]]:
+    rows: list[tuple[str, str, str]] = []
+    for result in results:
+        for metadata_key in ("spectrum_plots", "property_plots"):
+            value = result.metadata.get(metadata_key)
+            if isinstance(value, dict):
+                rows.extend(
+                    (result.species_name, str(plot_type), str(path))
+                    for plot_type, path in sorted(value.items())
+                )
+            elif isinstance(value, (list, tuple)):
+                rows.extend((result.species_name, "plot", str(path)) for path in value)
+            elif value:
+                rows.append((result.species_name, "plot", str(value)))
+    return rows
+
+
+def _is_imaginary_mode(mode: object) -> bool:
+    is_imaginary = getattr(mode, "is_imaginary", None)
+    frequency = getattr(mode, "frequency_cm1", None)
+    return bool(is_imaginary) or (frequency is not None and frequency < 0.0)
 
 
 def _method_provenance_summary(

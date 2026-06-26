@@ -3,6 +3,11 @@ from __future__ import annotations
 from qchem_workbench.analysis.adsorption import AdsorptionEnergyRow
 from qchem_workbench.analysis.quality_checks import QualityCheck
 from qchem_workbench.analysis.reactions import ReactionEnergyRow
+from qchem_workbench.core.properties import (
+    CalculationProperties,
+    ElectronicExcitation,
+    VibrationalMode,
+)
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
 from qchem_workbench.reports.markdown import generate_markdown_report
@@ -330,3 +335,99 @@ def test_adsorption_report_includes_mixed_method_warning():
 
     assert "Adsorption row h_on_surface" in report
     assert "mixed backend/method/basis/task/solvent" in report
+
+
+def test_markdown_report_includes_vibrational_property_sections():
+    results = [
+        CalculationResult(
+            species_name="water",
+            backend="gaussian",
+            method="wb97xd",
+            basis="6-31g",
+            task="freq",
+            success=True,
+            properties=CalculationProperties(
+                vibrational_modes=(
+                    VibrationalMode(
+                        frequency_cm1=-50.0,
+                        ir_intensity_km_mol=12.0,
+                        raman_activity_angstrom4_amu=1.5,
+                        is_imaginary=True,
+                    ),
+                    VibrationalMode(
+                        frequency_cm1=1600.0,
+                        ir_intensity_km_mol=45.0,
+                    ),
+                )
+            ),
+        )
+    ]
+
+    report = generate_markdown_report(results)
+
+    assert "## Vibrational summary" in report
+    assert "Min frequency (cm^-1)" in report
+    assert "Modes with IR intensity (km/mol)" in report
+    assert "Modes with Raman activity (angstrom^4/amu)" in report
+    assert "## Imaginary-frequency summary" in report
+    assert "Most negative frequency (cm^-1)" in report
+    assert "| water | 2 | -50 | 1600 | 1 | 2 | 1 |" in report
+
+
+def test_markdown_report_includes_excitation_orbital_and_plot_sections():
+    results = [
+        CalculationResult(
+            species_name="water",
+            backend="orca",
+            method="b3lyp",
+            basis="def2-svp",
+            task="tddft",
+            success=True,
+            homo_ev=-6.1,
+            lumo_ev=-1.2,
+            gap_ev=4.9,
+            metadata={"spectrum_plots": {"ir": "reports/water_ir.png"}},
+            properties=CalculationProperties(
+                excitations=(
+                    ElectronicExcitation(
+                        energy_ev=4.0,
+                        wavelength_nm=309.960496,
+                        oscillator_strength=0.123,
+                        state_label="Singlet-A",
+                    ),
+                )
+            ),
+        )
+    ]
+
+    report = generate_markdown_report(results)
+
+    assert "## Excitation summary" in report
+    assert "Excitation energy (eV)" in report
+    assert "Wavelength (nm)" in report
+    assert "| water | Singlet-A | 4 | 309.960496 | 0.123 |" in report
+    assert "## Orbital summary" in report
+    assert "| water | -6.1 | -1.2 | 4.9 |" in report
+    assert "## Property plot links" in report
+    assert "| water | ir | reports/water_ir.png |" in report
+
+
+def test_markdown_report_without_properties_remains_clean():
+    results = [
+        CalculationResult(
+            species_name="water",
+            backend="gaussian",
+            method="wb97xd",
+            basis="6-31g",
+            task="single_point",
+            success=True,
+        )
+    ]
+
+    report = generate_markdown_report(results)
+
+    assert "## Vibrational summary" not in report
+    assert "## Imaginary-frequency summary" not in report
+    assert "## Excitation summary" not in report
+    assert "## Orbital summary" not in report
+    assert "## Property plot links" not in report
