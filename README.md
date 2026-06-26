@@ -24,6 +24,8 @@ The current workflow support focuses on:
 - Quantum ESPRESSO `pw.x` input rendering and output parsing without running QE.
 - Generic species, result, quality-check, reaction, report, and project
   manifest utilities.
+- Generic adsorption-energy and CHE-style electrochemical bookkeeping with
+  explicit, user-visible correction terms.
 
 CO2RR is included as the first domain example, not as the scope of the package.
 Core modules remain generic and backend-agnostic.
@@ -330,6 +332,21 @@ qchemwb reaction-table examples/pathways/basic_isomerisation.yaml /tmp/qchemwb-b
 Electronic and Gibbs modes do not fall back to each other. No electrochemical or
 standard-state corrections are applied.
 
+## CHE-Style Electrochemical Bookkeeping
+
+CHE-style analysis starts from explicit Gibbs free energies and writes every
+correction term separately. qchem-workbench does not choose proton/electron
+references, infer mechanisms, or claim activity/selectivity.
+
+```bash
+qchemwb che-table che_pathway.yaml results/results.json --out results/che_table.csv
+```
+
+The built-in bookkeeping terms use documented sign conventions:
+`-n * U` eV for potential and `n * k_B * T * ln(10) * pH` eV for pH. Users are
+responsible for deciding whether those conventions and references fit their
+workflow. See `docs/electrochemistry.md`.
+
 ## Quality Checks And Triage
 
 Quality checks are conservative and generic:
@@ -404,6 +421,8 @@ Generic pathway example:
 - Synthetic fixture data is for parser and workflow testing only.
 - Reaction tables use a products-minus-reactants sign convention and apply no
   unrequested corrections.
+- CHE-style tables expose every correction term and do not treat limiting
+  potentials as experimentally validated overpotentials.
 
 ## Author
 

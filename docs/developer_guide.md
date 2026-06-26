@@ -235,6 +235,7 @@ Both terms are shown as individual correction terms. User-supplied correction
 terms must also remain visible with a label, value in eV, sign convention, and
 source or note. Users are responsible for choosing appropriate electrochemical
 references and deciding whether these conventions apply to a specific workflow.
+See `docs/electrochemistry.md` for user-facing CLI examples and caveats.
 
 ## Adding New Backends
 
