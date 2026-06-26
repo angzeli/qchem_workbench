@@ -15,4 +15,5 @@ def test_validate_examples_script_exits_zero():
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Example validation completed successfully." in result.stdout
+    assert "[v2 example gate] basic molecule workflow" in result.stdout
+    assert "v2 example validation gate completed successfully." in result.stdout

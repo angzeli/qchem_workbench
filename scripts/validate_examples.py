@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -16,10 +17,73 @@ if str(SRC_PATH) not in sys.path:
 from qchem_workbench.cli import main  # noqa: E402
 
 
+EXPECTED_EXAMPLE_DIRS = (
+    "basic_molecules",
+    "gaussian_parsing",
+    "orca_parsing",
+    "qe_parsing",
+    "co2rr_molecular",
+    "surface_adsorption",
+    "che_analysis",
+    "screening_campaign",
+)
+
+SYNTHETIC_FIXTURE_EXAMPLE_DIRS = EXPECTED_EXAMPLE_DIRS
+
+SCHEMA_CHECK_FILES = (
+    "examples/basic_molecules/species.yaml",
+    "examples/co2rr_molecular/species.yaml",
+    "examples/pathways/basic_isomerisation.yaml",
+    "examples/pathways/co2rr/co_pathway.yaml",
+    "examples/pathways/co2rr/formate_pathway.yaml",
+    "examples/che_analysis/che_pathway.yaml",
+    "examples/che_analysis/results.json",
+    "examples/screening_campaign/campaign.yaml",
+    "examples/screening_campaign/results.json",
+    "examples/surface_adsorption/results.json",
+)
+
+STATIC_SYNTHETIC_RESULT_STORES = (
+    "examples/che_analysis/results.json",
+    "examples/screening_campaign/results.json",
+    "examples/surface_adsorption/results.json",
+)
+
+
 def run_cli(args: list[str]) -> None:
     exit_code = main(args)
     if exit_code != 0:
         raise SystemExit(f"command failed with exit code {exit_code}: qchemwb {' '.join(args)}")
+
+
+def validate_example_layout(_work_dir: Path) -> None:
+    for example_dir in EXPECTED_EXAMPLE_DIRS:
+        readme = REPO_ROOT / "examples" / example_dir / "README.md"
+        if not readme.exists():
+            raise SystemExit(f"missing example README: {readme}")
+
+    for example_dir in SYNTHETIC_FIXTURE_EXAMPLE_DIRS:
+        readme = REPO_ROOT / "examples" / example_dir / "README.md"
+        text = readme.read_text(encoding="utf-8").lower()
+        if "synthetic" not in text:
+            raise SystemExit(f"example README must label fixtures synthetic: {readme}")
+
+
+def validate_schema_files(_work_dir: Path) -> None:
+    for relative_path in SCHEMA_CHECK_FILES:
+        run_cli(["schema-check", str(REPO_ROOT / relative_path)])
+
+
+def validate_synthetic_result_labels(_work_dir: Path) -> None:
+    for relative_path in STATIC_SYNTHETIC_RESULT_STORES:
+        path = REPO_ROOT / relative_path
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for index, result in enumerate(data.get("results", []), start=1):
+            metadata = result.get("metadata", {})
+            if metadata.get("fixture") != "synthetic":
+                raise SystemExit(
+                    f"{path}: results[{index}] must label fixture metadata as synthetic"
+                )
 
 
 def validate_basic_molecules(work_dir: Path) -> None:
@@ -43,6 +107,7 @@ def validate_basic_molecules(work_dir: Path) -> None:
         ]
     )
     run_cli(["parse-gaussian", str(example / "outputs"), "--out", str(results_path)])
+    run_cli(["schema-check", str(results_path)])
     run_cli(["check-results", str(results_path), "--species", str(example / "species.yaml")])
     run_cli(
         [
@@ -77,6 +142,7 @@ def validate_co2rr_molecular(work_dir: Path) -> None:
         ]
     )
     run_cli(["parse-gaussian", str(example / "outputs"), "--out", str(results_path)])
+    run_cli(["schema-check", str(results_path)])
     run_cli(["check-results", str(results_path), "--species", str(example / "species.yaml")])
     for pathway_name in ("co_pathway.yaml", "formate_pathway.yaml"):
         run_cli(
@@ -107,7 +173,9 @@ def validate_gaussian_parsing(work_dir: Path) -> None:
     results_path = work_dir / "gaussian_parsing_results.json"
 
     run_cli(["parse-gaussian", str(example / "outputs"), "--out", str(results_path)])
+    run_cli(["schema-check", str(results_path)])
     run_cli(["check-results", str(results_path)])
+    run_cli(["report", str(results_path), "--out", str(work_dir / "gaussian_report.md")])
 
 
 def validate_orca_parsing(work_dir: Path) -> None:
@@ -115,6 +183,7 @@ def validate_orca_parsing(work_dir: Path) -> None:
     results_path = work_dir / "orca_parsing_results.json"
 
     run_cli(["parse-orca", str(example / "outputs"), "--out", str(results_path)])
+    run_cli(["schema-check", str(results_path)])
     run_cli(["check-results", str(results_path)])
 
 
@@ -123,6 +192,7 @@ def validate_qe_parsing(work_dir: Path) -> None:
     results_path = work_dir / "qe_parsing_results.json"
 
     run_cli(["parse-qe", str(example / "outputs"), "--out", str(results_path)])
+    run_cli(["schema-check", str(results_path)])
     run_cli(["check-results", str(results_path)])
 
 
@@ -183,15 +253,23 @@ def validate_screening_campaign(work_dir: Path) -> None:
 def main_script() -> int:
     with tempfile.TemporaryDirectory(prefix="qchemwb-examples-") as temp_dir:
         work_dir = Path(temp_dir)
-        validate_basic_molecules(work_dir)
-        validate_gaussian_parsing(work_dir)
-        validate_orca_parsing(work_dir)
-        validate_qe_parsing(work_dir)
-        validate_co2rr_molecular(work_dir)
-        validate_surface_adsorption(work_dir)
-        validate_che_analysis(work_dir)
-        validate_screening_campaign(work_dir)
-    print("Example validation completed successfully.")
+        steps = (
+            ("example layout", validate_example_layout),
+            ("schema files", validate_schema_files),
+            ("synthetic result labels", validate_synthetic_result_labels),
+            ("basic molecule workflow", validate_basic_molecules),
+            ("Gaussian parsing workflow", validate_gaussian_parsing),
+            ("ORCA parsing workflow", validate_orca_parsing),
+            ("QE parsing workflow", validate_qe_parsing),
+            ("CO2RR molecular workflow", validate_co2rr_molecular),
+            ("surface adsorption workflow", validate_surface_adsorption),
+            ("CHE analysis workflow", validate_che_analysis),
+            ("screening campaign workflow", validate_screening_campaign),
+        )
+        for label, step in steps:
+            print(f"[v2 example gate] {label}")
+            step(work_dir)
+    print("v2 example validation gate completed successfully.")
     return 0
 
 
