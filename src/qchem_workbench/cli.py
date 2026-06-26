@@ -73,6 +73,7 @@ from qchem_workbench.core.structure import AtomisticStructure
 from qchem_workbench.projects.manifest import ProjectManifest, load_project_manifest
 from qchem_workbench.reports.markdown import write_markdown_report
 from qchem_workbench.reports.plotting import plot_pathway_from_csv
+from qchem_workbench.reports.spectrum import SPECTRUM_TYPES, plot_vibrational_spectrum
 from qchem_workbench.reports.triage import (
     classify_triage_results,
     write_failed_jobs_report,
@@ -355,6 +356,18 @@ def build_parser() -> argparse.ArgumentParser:
     plot_pathway_parser.add_argument("--out", required=True, type=Path)
     plot_pathway_parser.add_argument("--title")
     plot_pathway_parser.set_defaults(func=_plot_pathway_command)
+
+    plot_spectrum_parser = subparsers.add_parser(
+        "plot-spectrum", help="plot a broadened vibrational spectrum"
+    )
+    plot_spectrum_parser.add_argument("results", type=Path)
+    plot_spectrum_parser.add_argument("--species", required=True)
+    plot_spectrum_parser.add_argument("--type", required=True, choices=SPECTRUM_TYPES)
+    plot_spectrum_parser.add_argument("--out", required=True, type=Path)
+    plot_spectrum_parser.add_argument("--csv", type=Path)
+    plot_spectrum_parser.add_argument("--width", type=float, default=20.0)
+    plot_spectrum_parser.add_argument("--step", type=float, default=1.0)
+    plot_spectrum_parser.set_defaults(func=_plot_spectrum_command)
 
     run_project_parser = subparsers.add_parser(
         "run-project", help="run explicitly configured project manifest steps"
@@ -821,6 +834,41 @@ def _plot_pathway_command(args: argparse.Namespace) -> int:
 
     print(f"Wrote pathway plot to {args.out}.")
     return 0
+
+
+def _plot_spectrum_command(args: argparse.Namespace) -> int:
+    try:
+        results = load_result_collection(args.results)
+        result = _result_for_species(results, args.species)
+        plot_path, csv_path = plot_vibrational_spectrum(
+            result,
+            args.out,
+            spectrum_type=args.type,
+            csv_path=args.csv,
+            width_cm1=args.width,
+            step_cm1=args.step,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote {args.type.upper()} spectrum plot to {plot_path}.")
+    print(f"Wrote broadened spectrum CSV to {csv_path}.")
+    return 0
+
+
+def _result_for_species(
+    results: list[CalculationResult], species_name: str
+) -> CalculationResult:
+    matches = [result for result in results if result.species_name == species_name]
+    if not matches:
+        raise ValueError(f"no result found for species {species_name!r}")
+    if len(matches) > 1:
+        raise ValueError(
+            f"multiple results found for species {species_name!r}; provide a "
+            "deduplicated result collection"
+        )
+    return matches[0]
 
 
 def _run_project_command(args: argparse.Namespace) -> int:

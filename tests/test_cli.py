@@ -11,6 +11,7 @@ from qchem_workbench.backends.orca_parser import parse_orca_output
 from qchem_workbench.backends.pyscf_backend import MissingOptionalDependencyError
 from qchem_workbench.backends.qe_parser import parse_qe_output
 from qchem_workbench.cli import main
+from qchem_workbench.core.properties import CalculationProperties, VibrationalMode
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.registry import load_species_registry
 from qchem_workbench.results.store import save_result_collection
@@ -1952,6 +1953,54 @@ def test_plot_pathway_command_writes_png(tmp_path, monkeypatch, capsys):
     assert exit_code == 0
     assert "Wrote pathway plot" in captured.out
     assert out_path.read_bytes().startswith(b"\x89PNG")
+
+
+def test_plot_spectrum_command_writes_png_and_csv(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / "mpl"))
+    results_path = tmp_path / "results.json"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="b3lyp",
+                basis="def2-svp",
+                task="freq",
+                success=True,
+                properties=CalculationProperties(
+                    vibrational_modes=(
+                        VibrationalMode(
+                            frequency_cm1=100.0,
+                            ir_intensity_km_mol=2.0,
+                        ),
+                    )
+                ),
+            )
+        ],
+    )
+    out_path = tmp_path / "water_ir.png"
+
+    exit_code = main(
+        [
+            "plot-spectrum",
+            str(results_path),
+            "--species",
+            "water",
+            "--type",
+            "ir",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    csv_path = out_path.with_suffix(".csv")
+    assert exit_code == 0
+    assert "Wrote IR spectrum plot" in captured.out
+    assert out_path.read_bytes().startswith(b"\x89PNG")
+    assert csv_path.exists()
+    assert "intensity_km_mol" in csv_path.read_text(encoding="utf-8").splitlines()[0]
 
 
 def test_run_project_renders_gaussian_inputs(tmp_path, capsys):
