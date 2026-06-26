@@ -19,10 +19,12 @@ from qchem_workbench.core.geometry import (
 from qchem_workbench.core.registry import SUPPORTED_SCHEMA_VERSION, load_species_registry
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species, SpeciesConformer
+from qchem_workbench.core.structure import AtomisticStructure
 from qchem_workbench.core.units import HARTREE_TO_EV, hartree_to_ev
 
 __all__ = [
     "Atom",
+    "AtomisticStructure",
     "CalculationResult",
     "CalculationSpec",
     "HARTREE_TO_EV",
