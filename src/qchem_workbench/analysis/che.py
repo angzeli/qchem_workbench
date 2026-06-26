@@ -46,6 +46,8 @@ class CHEPathway:
 class CHEFreeEnergyRow:
     reaction_id: str
     label: str | None
+    proton_electron_pairs: float
+    potential_reference: str | None
     complete: bool
     uncorrected_delta_g_hartree: float | None
     uncorrected_delta_g_ev: float | None
@@ -55,6 +57,19 @@ class CHEFreeEnergyRow:
     corrected_delta_g_kj_mol: float | None
     missing_species: tuple[str, ...]
     warnings: tuple[str, ...]
+    notes: str | None = None
+
+
+@dataclass(frozen=True)
+class CHELimitingPotentialResult:
+    complete: bool
+    limiting_reaction_ids: tuple[str, ...]
+    max_uphill_delta_g_ev: float | None
+    limiting_potential_V: float | None
+    reference_equilibrium_potential_V: float | None = None
+    relative_to_reference_equilibrium_V: float | None = None
+    incomplete_reactions: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
     notes: str | None = None
 
 
@@ -125,6 +140,8 @@ def _che_free_energy_row(
         return CHEFreeEnergyRow(
             reaction_id=reaction.id,
             label=reaction.label,
+            proton_electron_pairs=reaction.proton_electron_pairs,
+            potential_reference=reaction.potential_reference,
             complete=False,
             uncorrected_delta_g_hartree=None,
             uncorrected_delta_g_ev=None,
@@ -145,6 +162,8 @@ def _che_free_energy_row(
     return CHEFreeEnergyRow(
         reaction_id=reaction.id,
         label=reaction.label,
+        proton_electron_pairs=reaction.proton_electron_pairs,
+        potential_reference=reaction.potential_reference,
         complete=True,
         uncorrected_delta_g_hartree=delta_g_hartree,
         uncorrected_delta_g_ev=delta_g_ev,
@@ -156,6 +175,116 @@ def _che_free_energy_row(
         warnings=warnings,
         notes=reaction.notes,
     )
+
+
+def che_limiting_potential(
+    rows: list[CHEFreeEnergyRow],
+    *,
+    results: list[CalculationResult] | None = None,
+    reference_equilibrium_potential_V: float | None = None,
+) -> CHELimitingPotentialResult:
+    if not rows:
+        return CHELimitingPotentialResult(
+            complete=False,
+            limiting_reaction_ids=(),
+            max_uphill_delta_g_ev=None,
+            limiting_potential_V=None,
+            reference_equilibrium_potential_V=reference_equilibrium_potential_V,
+            warnings=("No CHE rows were provided.",),
+            notes="Limiting potential was not computed.",
+        )
+
+    incomplete_reactions = tuple(
+        row.reaction_id
+        for row in rows
+        if not row.complete or row.corrected_delta_g_ev is None
+    )
+    warnings = _limiting_potential_warnings(rows, results)
+    if incomplete_reactions:
+        return CHELimitingPotentialResult(
+            complete=False,
+            limiting_reaction_ids=(),
+            max_uphill_delta_g_ev=None,
+            limiting_potential_V=None,
+            reference_equilibrium_potential_V=reference_equilibrium_potential_V,
+            incomplete_reactions=incomplete_reactions,
+            warnings=warnings,
+            notes="Limiting potential was not computed because at least one step is incomplete.",
+        )
+
+    unsupported_rows = tuple(
+        row.reaction_id for row in rows if row.proton_electron_pairs <= 0
+    )
+    if unsupported_rows:
+        return CHELimitingPotentialResult(
+            complete=False,
+            limiting_reaction_ids=(),
+            max_uphill_delta_g_ev=None,
+            limiting_potential_V=None,
+            reference_equilibrium_potential_V=reference_equilibrium_potential_V,
+            warnings=(
+                *warnings,
+                "Limiting potential requires positive proton_electron_pairs for "
+                f"each step; unsupported rows: {', '.join(unsupported_rows)}.",
+            ),
+            notes="No limiting potential was computed for non-electrochemical steps.",
+        )
+
+    max_uphill = max(float(row.corrected_delta_g_ev) for row in rows)
+    limiting_rows = tuple(
+        row for row in rows if abs(float(row.corrected_delta_g_ev) - max_uphill) < 1e-12
+    )
+    limiting_reaction_ids = tuple(row.reaction_id for row in limiting_rows)
+    first_limiting_row = limiting_rows[0]
+    limiting_potential = -max_uphill / first_limiting_row.proton_electron_pairs
+    relative = (
+        None
+        if reference_equilibrium_potential_V is None
+        else limiting_potential - reference_equilibrium_potential_V
+    )
+    return CHELimitingPotentialResult(
+        complete=True,
+        limiting_reaction_ids=limiting_reaction_ids,
+        max_uphill_delta_g_ev=max_uphill,
+        limiting_potential_V=limiting_potential,
+        reference_equilibrium_potential_V=reference_equilibrium_potential_V,
+        relative_to_reference_equilibrium_V=relative,
+        warnings=warnings,
+        notes=(
+            "Limiting potential is computed from the maximum uphill corrected "
+            "step as -Delta G_i / n_i. "
+            "This is a transparent descriptor, not a definitive overpotential."
+        ),
+    )
+
+
+def _limiting_potential_warnings(
+    rows: list[CHEFreeEnergyRow],
+    results: list[CalculationResult] | None,
+) -> tuple[str, ...]:
+    warnings: list[str] = []
+    references = {
+        row.potential_reference
+        for row in rows
+        if row.potential_reference is not None
+    }
+    if len(references) > 1:
+        warnings.append("CHE rows use mixed potential references.")
+    if results is not None and len(_result_setting_groups(results)) > 1:
+        warnings.append(
+            "CHE limiting-potential analysis uses mixed backend/method/basis/task "
+            "settings; compare steps only after checking provenance."
+        )
+    return tuple(warnings)
+
+
+def _result_setting_groups(
+    results: list[CalculationResult],
+) -> set[tuple[str, str | None, str | None, str | None]]:
+    return {
+        (result.backend, result.method, result.basis, result.task)
+        for result in results
+    }
 
 
 def _che_correction_terms(reaction: CHEReaction) -> tuple[CorrectionTerm, ...]:

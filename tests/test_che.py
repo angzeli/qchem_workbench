@@ -7,6 +7,7 @@ from qchem_workbench.analysis.che import (
     DEFAULT_CHE_TEMPERATURE_K,
     LN_10,
     che_free_energy_table,
+    che_limiting_potential,
     load_che_pathway,
 )
 from qchem_workbench.core.result import CalculationResult
@@ -197,6 +198,99 @@ def test_che_missing_gibbs_remains_incomplete(tmp_path):
     assert row.correction_total_eV == pytest.approx(-0.5)
 
 
+def test_che_limiting_potential_complete_pathway(tmp_path):
+    pathway = _load_two_step_che_fixture(tmp_path, second_delta_hartree=-0.02)
+    rows = che_free_energy_table(
+        pathway,
+        [
+            *_gibbs_results(a=-2.0, b=-1.9),
+            CalculationResult(
+                species_name="C",
+                backend="gaussian",
+                method="b3lyp",
+                basis="def2-svp",
+                task="freq",
+                success=True,
+                gibbs_free_energy_hartree=-1.92,
+            ),
+        ],
+    )
+
+    result = che_limiting_potential(rows)
+
+    assert result.complete is True
+    assert result.limiting_reaction_ids == ("r1",)
+    assert result.max_uphill_delta_g_ev == pytest.approx(0.1 * HARTREE_TO_EV)
+    assert result.limiting_potential_V == pytest.approx(-0.1 * HARTREE_TO_EV)
+
+
+def test_che_limiting_potential_incomplete_pathway(tmp_path):
+    pathway = _load_two_step_che_fixture(tmp_path, second_delta_hartree=-0.02)
+    rows = che_free_energy_table(pathway, _gibbs_results(a=-2.0, b=-1.9))
+
+    result = che_limiting_potential(rows)
+
+    assert result.complete is False
+    assert result.limiting_potential_V is None
+    assert result.incomplete_reactions == ("r2",)
+
+
+def test_che_limiting_potential_tied_steps(tmp_path):
+    pathway = _load_two_step_che_fixture(tmp_path, second_delta_hartree=0.1)
+    rows = che_free_energy_table(
+        pathway,
+        [
+            *_gibbs_results(a=-2.0, b=-1.9),
+            CalculationResult(
+                species_name="C",
+                backend="gaussian",
+                method="b3lyp",
+                basis="def2-svp",
+                task="freq",
+                success=True,
+                gibbs_free_energy_hartree=-1.8,
+            ),
+        ],
+    )
+
+    result = che_limiting_potential(rows)
+
+    assert result.complete is True
+    assert result.limiting_reaction_ids == ("r1", "r2")
+
+
+def test_che_limiting_potential_mixed_settings_warning(tmp_path):
+    pathway = _load_che_fixture(
+        tmp_path,
+        "    proton_electron_pairs: 1\n",
+    )
+    results = [
+        CalculationResult(
+            species_name="A",
+            backend="gaussian",
+            method="b3lyp",
+            basis="def2-svp",
+            task="freq",
+            success=True,
+            gibbs_free_energy_hartree=-2.0,
+        ),
+        CalculationResult(
+            species_name="B",
+            backend="gaussian",
+            method="pbe0",
+            basis="def2-svp",
+            task="freq",
+            success=True,
+            gibbs_free_energy_hartree=-1.9,
+        ),
+    ]
+
+    analysis = che_limiting_potential(che_free_energy_table(pathway, results), results=results)
+
+    assert analysis.complete is True
+    assert any("mixed backend/method" in warning for warning in analysis.warnings)
+
+
 def _load_che_fixture(tmp_path, extra_fields: str):
     path = tmp_path / "che.yaml"
     path.write_text(
@@ -206,6 +300,25 @@ def _load_che_fixture(tmp_path, extra_fields: str):
         "    reactants: {A: 1}\n"
         "    products: {B: 1}\n"
         f"{extra_fields}",
+        encoding="utf-8",
+    )
+    return load_che_pathway(path)
+
+
+def _load_two_step_che_fixture(tmp_path, second_delta_hartree: float):
+    path = tmp_path / "che_two_step.yaml"
+    path.write_text(
+        "schema_version: 1\n"
+        "reactions:\n"
+        "  - id: r1\n"
+        "    reactants: {A: 1}\n"
+        "    products: {B: 1}\n"
+        "    proton_electron_pairs: 1\n"
+        "  - id: r2\n"
+        "    reactants: {B: 1}\n"
+        "    products: {C: 1}\n"
+        "    proton_electron_pairs: 1\n"
+        f"    notes: synthetic fixture target delta {second_delta_hartree}\n",
         encoding="utf-8",
     )
     return load_che_pathway(path)

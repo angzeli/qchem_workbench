@@ -23,9 +23,11 @@ from qchem_workbench.analysis.che import (
     LN_10,
     SUPPORTED_POTENTIAL_REFERENCES,
     CHEFreeEnergyRow,
+    CHELimitingPotentialResult,
     CHEPathway,
     CHEReaction,
     che_free_energy_table,
+    che_limiting_potential,
     load_che_pathway,
 )
 from qchem_workbench.analysis.corrections import (
@@ -67,6 +69,7 @@ __all__ = [
     "BOLTZMANN_EV_PER_K",
     "CORRECTION_TARGET_TYPES",
     "CHEFreeEnergyRow",
+    "CHELimitingPotentialResult",
     "CHEPathway",
     "CHEReaction",
     "CHE_SCHEMA_VERSION",
@@ -91,6 +94,7 @@ __all__ = [
     "apply_corrections",
     "attach_corrections",
     "che_free_energy_table",
+    "che_limiting_potential",
     "load_pathway",
     "load_adsorption_workflow",
     "load_che_pathway",
