@@ -1410,6 +1410,251 @@ def test_reaction_table_missing_data(tmp_path):
     assert rows[0]["delta_hartree"] == ""
 
 
+def _write_adsorption_cli_fixture(
+    adsorption_path, system_id="co_on_surface", adsorbate="co_gas", combined="slab_co"
+) -> None:
+    adsorption_path.write_text(
+        "schema_version: 1\n"
+        "adsorption_systems:\n"
+        f"  - id: {system_id}\n"
+        "    slab_result: slab_clean\n"
+        f"    adsorbate_result: {adsorbate}\n"
+        f"    combined_result: {combined}\n",
+        encoding="utf-8",
+    )
+
+
+def _save_adsorption_cli_results(results_path, results) -> None:
+    save_result_collection(
+        results_path,
+        [CalculationResult(**result) for result in results],
+    )
+
+
+def test_adsorption_table_electronic_mode(tmp_path, capsys):
+    adsorption_path = tmp_path / "adsorption.yaml"
+    _write_adsorption_cli_fixture(adsorption_path)
+    results_path = tmp_path / "results.json"
+    _save_adsorption_cli_results(
+        results_path,
+        [
+            {
+                "species_name": "slab_clean",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "electronic_energy_hartree": -100.0,
+            },
+            {
+                "species_name": "co_gas",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "electronic_energy_hartree": -10.0,
+            },
+            {
+                "species_name": "slab_co",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "electronic_energy_hartree": -111.0,
+            },
+        ],
+    )
+    out_path = tmp_path / "adsorption_table.csv"
+
+    exit_code = main(
+        [
+            "adsorption-table",
+            str(adsorption_path),
+            str(results_path),
+            "--quantity",
+            "electronic",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert "adsorption_electronic_energy" in captured.out
+    assert rows[0]["system_id"] == "co_on_surface"
+    assert float(rows[0]["adsorption_energy_hartree"]) == -1.0
+
+
+def test_adsorption_table_gibbs_mode(tmp_path):
+    adsorption_path = tmp_path / "adsorption.yaml"
+    _write_adsorption_cli_fixture(adsorption_path)
+    results_path = tmp_path / "results.json"
+    _save_adsorption_cli_results(
+        results_path,
+        [
+            {
+                "species_name": "slab_clean",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "gibbs_free_energy_hartree": -100.2,
+            },
+            {
+                "species_name": "co_gas",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "gibbs_free_energy_hartree": -10.2,
+            },
+            {
+                "species_name": "slab_co",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "gibbs_free_energy_hartree": -111.0,
+            },
+        ],
+    )
+    out_path = tmp_path / "adsorption_table.csv"
+
+    exit_code = main(
+        [
+            "adsorption-table",
+            str(adsorption_path),
+            str(results_path),
+            "--quantity",
+            "gibbs",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert rows[0]["quantity"] == "adsorption_gibbs_free_energy"
+    assert float(rows[0]["adsorption_energy_hartree"]) == pytest.approx(-0.6)
+
+
+def test_adsorption_table_missing_data(tmp_path):
+    adsorption_path = tmp_path / "adsorption.yaml"
+    _write_adsorption_cli_fixture(adsorption_path)
+    results_path = tmp_path / "results.json"
+    _save_adsorption_cli_results(
+        results_path,
+        [
+            {
+                "species_name": "slab_clean",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "electronic_energy_hartree": -100.0,
+            },
+            {
+                "species_name": "co_gas",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "electronic_energy_hartree": -10.0,
+            },
+        ],
+    )
+    out_path = tmp_path / "adsorption_table.csv"
+
+    exit_code = main(
+        [
+            "adsorption-table",
+            str(adsorption_path),
+            str(results_path),
+            "--quantity",
+            "electronic",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert rows[0]["complete"] == "False"
+    assert rows[0]["missing"] == "missing_result:combined:slab_co"
+    assert rows[0]["adsorption_energy_hartree"] == ""
+
+
+def test_adsorption_table_csv_output_includes_units(tmp_path):
+    adsorption_path = tmp_path / "adsorption.yaml"
+    _write_adsorption_cli_fixture(
+        adsorption_path, system_id="h_on_surface", adsorbate="h_gas", combined="slab_h"
+    )
+    results_path = tmp_path / "results.json"
+    _save_adsorption_cli_results(
+        results_path,
+        [
+            {
+                "species_name": "slab_clean",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "electronic_energy_hartree": -100.0,
+            },
+            {
+                "species_name": "h_gas",
+                "backend": "qe",
+                "method": "pbe0",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "electronic_energy_hartree": -1.0,
+            },
+            {
+                "species_name": "slab_h",
+                "backend": "qe",
+                "method": "pbe",
+                "basis": "ecutwfc=40",
+                "task": "scf",
+                "success": True,
+                "electronic_energy_hartree": -102.0,
+            },
+        ],
+    )
+    out_path = tmp_path / "adsorption_table.csv"
+
+    exit_code = main(
+        [
+            "adsorption-table",
+            str(adsorption_path),
+            str(results_path),
+            "--quantity",
+            "electronic",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert {
+        "adsorption_energy_hartree",
+        "adsorption_energy_ev",
+        "adsorption_energy_kj_mol",
+    }.issubset(rows[0])
+    assert "mixed backend/method" in rows[0]["warnings"]
+
+
 def test_select_conformers_writes_json(tmp_path, capsys):
     results_path = tmp_path / "results.json"
     out_path = tmp_path / "selected_conformers.json"

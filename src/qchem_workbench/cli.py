@@ -12,6 +12,12 @@ from pathlib import Path
 import yaml
 
 from qchem_workbench import __version__
+from qchem_workbench.analysis.adsorption import (
+    AdsorptionEnergyRow,
+    adsorption_electronic_energy_table,
+    adsorption_gibbs_free_energy_table,
+    load_adsorption_workflow,
+)
 from qchem_workbench.analysis.conformers import select_lowest_energy_conformers
 from qchem_workbench.analysis.quality_checks import QualityCheck, run_quality_checks
 from qchem_workbench.analysis.reactions import ReactionEnergyRow
@@ -285,6 +291,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reaction_table_parser.add_argument("--out", required=True, type=Path)
     reaction_table_parser.set_defaults(func=_reaction_table_command)
+
+    adsorption_table_parser = subparsers.add_parser(
+        "adsorption-table", help="compute generic adsorption energy tables"
+    )
+    adsorption_table_parser.add_argument("adsorption", type=Path)
+    adsorption_table_parser.add_argument("results", type=Path)
+    adsorption_table_parser.add_argument(
+        "--quantity", required=True, choices=("electronic", "gibbs")
+    )
+    adsorption_table_parser.add_argument("--out", required=True, type=Path)
+    adsorption_table_parser.set_defaults(func=_adsorption_table_command)
 
     select_conformers_parser = subparsers.add_parser(
         "select-conformers", help="select lowest-energy conformer results"
@@ -648,6 +665,32 @@ def _reaction_table_command(args: argparse.Namespace) -> int:
         print(
             f"{row.reaction_id}\t{row.quantity}\t{row.complete}\t"
             f"{delta_hartree}\t{';'.join(row.missing_species)}"
+        )
+    return 0
+
+
+def _adsorption_table_command(args: argparse.Namespace) -> int:
+    try:
+        workflow = load_adsorption_workflow(args.adsorption)
+        results = load_result_collection(args.results)
+        rows = _adsorption_energy_rows(workflow, results, args.quantity)
+        _write_adsorption_table_csv(args.out, rows)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(
+        "system_id\tquantity\tcomplete\tadsorption_energy_hartree\tmissing"
+    )
+    for row in rows:
+        energy = (
+            ""
+            if row.adsorption_hartree is None
+            else f"{row.adsorption_hartree:.12g}"
+        )
+        print(
+            f"{row.system_id}\t{row.quantity}\t{row.complete}\t"
+            f"{energy}\t{';'.join(row.missing)}"
         )
     return 0
 
@@ -1526,6 +1569,16 @@ def _reaction_energy_rows(pathway, results, quantity: str) -> list[ReactionEnerg
     raise ValueError(f"unsupported reaction quantity {quantity!r}")
 
 
+def _adsorption_energy_rows(
+    workflow, results, quantity: str
+) -> list[AdsorptionEnergyRow]:
+    if quantity == "electronic":
+        return adsorption_electronic_energy_table(workflow, results)
+    if quantity == "gibbs":
+        return adsorption_gibbs_free_energy_table(workflow, results)
+    raise ValueError(f"unsupported adsorption quantity {quantity!r}")
+
+
 def _write_reaction_table_csv(path: Path, rows: list[ReactionEnergyRow]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
@@ -1555,6 +1608,46 @@ def _write_reaction_table_csv(path: Path, rows: list[ReactionEnergyRow]) -> None
                     "delta_ev": row.delta_ev,
                     "delta_kj_mol": row.delta_kj_mol,
                     "missing_species": ";".join(row.missing_species),
+                    "notes": row.notes,
+                }
+            )
+
+
+def _write_adsorption_table_csv(path: Path, rows: list[AdsorptionEnergyRow]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "system_id",
+                "quantity",
+                "complete",
+                "adsorption_energy_hartree",
+                "adsorption_energy_ev",
+                "adsorption_energy_kj_mol",
+                "slab_result",
+                "adsorbate_result",
+                "combined_result",
+                "missing",
+                "warnings",
+                "notes",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "system_id": row.system_id,
+                    "quantity": row.quantity,
+                    "complete": row.complete,
+                    "adsorption_energy_hartree": row.adsorption_hartree,
+                    "adsorption_energy_ev": row.adsorption_ev,
+                    "adsorption_energy_kj_mol": row.adsorption_kj_mol,
+                    "slab_result": row.slab_result,
+                    "adsorbate_result": row.adsorbate_result,
+                    "combined_result": row.combined_result,
+                    "missing": ";".join(row.missing),
+                    "warnings": ";".join(row.warnings),
                     "notes": row.notes,
                 }
             )
