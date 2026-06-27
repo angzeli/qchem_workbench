@@ -11,7 +11,16 @@ from qchem_workbench.backends.orca_parser import parse_orca_output
 from qchem_workbench.backends.pyscf_backend import MissingOptionalDependencyError
 from qchem_workbench.backends.qe_parser import parse_qe_output
 from qchem_workbench.cli import main
-from qchem_workbench.core.properties import CalculationProperties, VibrationalMode
+from qchem_workbench.core.properties import (
+    AtomicCharge,
+    CalculationProperties,
+    DipoleMoment,
+    ExcitedState,
+    MolecularOrbital,
+    OrbitalTable,
+    PopulationAnalysis,
+    VibrationalMode,
+)
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.registry import load_species_registry
 from qchem_workbench.results.store import save_result_collection
@@ -1958,6 +1967,153 @@ def test_report_command_writes_markdown(tmp_path, capsys):
     assert "unmatched_species" in report
 
 
+def test_export_properties_charges_csv(tmp_path, capsys):
+    results_path = tmp_path / "results.json"
+    out_path = tmp_path / "charges.csv"
+    save_result_collection(results_path, [_property_export_result()])
+
+    exit_code = main(
+        [
+            "export-properties",
+            str(results_path),
+            "--type",
+            "charges",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.read_text(encoding="utf-8").splitlines()))
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Wrote 2 charges property row(s)" in captured.out
+    assert {row["scheme"] for row in rows} == {"Mulliken"}
+    assert rows[0]["charge_unit"] == "e"
+    assert rows[1]["element_symbol"] == "H"
+
+
+def test_export_properties_orbitals_csv(tmp_path):
+    results_path = tmp_path / "results.json"
+    out_path = tmp_path / "orbitals.csv"
+    save_result_collection(results_path, [_property_export_result()])
+
+    exit_code = main(
+        [
+            "export-properties",
+            str(results_path),
+            "--type",
+            "orbitals",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.read_text(encoding="utf-8").splitlines()))
+    assert exit_code == 0
+    assert [row["spin_channel"] for row in rows] == ["alpha", "beta"]
+    assert rows[0]["homo_index"] == "4"
+    assert rows[1]["lumo_index"] == "5"
+    assert rows[0]["energy_ev_unit"] == "eV"
+
+
+def test_export_properties_vibrations_csv(tmp_path):
+    results_path = tmp_path / "results.json"
+    out_path = tmp_path / "vibrations.csv"
+    save_result_collection(results_path, [_property_export_result()])
+
+    exit_code = main(
+        [
+            "export-properties",
+            str(results_path),
+            "--type",
+            "vibrations",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.read_text(encoding="utf-8").splitlines()))
+    assert exit_code == 0
+    assert rows[0]["mode_index"] == "1"
+    assert rows[0]["frequency_unit"] == "cm^-1"
+    assert rows[0]["is_imaginary"] == "True"
+
+
+def test_export_properties_excitations_csv(tmp_path):
+    results_path = tmp_path / "results.json"
+    out_path = tmp_path / "excitations.csv"
+    save_result_collection(results_path, [_property_export_result()])
+
+    exit_code = main(
+        [
+            "export-properties",
+            str(results_path),
+            "--type",
+            "excitations",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.read_text(encoding="utf-8").splitlines()))
+    assert exit_code == 0
+    assert rows[0]["state_index"] == "1"
+    assert rows[0]["energy_unit"] == "eV"
+    assert rows[0]["oscillator_strength"] == ""
+
+
+def test_export_properties_directory_mode_writes_non_empty_tables(tmp_path, capsys):
+    results_path = tmp_path / "results.json"
+    out_dir = tmp_path / "properties"
+    save_result_collection(results_path, [_property_export_result()])
+
+    exit_code = main(["export-properties", str(results_path), "--out", str(out_dir)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert (out_dir / "dipoles.csv").exists()
+    assert (out_dir / "charges.csv").exists()
+    assert (out_dir / "orbitals.csv").exists()
+    assert (out_dir / "vibrations.csv").exists()
+    assert (out_dir / "excitations.csv").exists()
+    assert "Wrote 1 dipoles property row(s)" in captured.out
+
+
+def test_export_properties_empty_property_set_prints_clear_message(tmp_path, capsys):
+    results_path = tmp_path / "results.json"
+    out_path = tmp_path / "charges.csv"
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="b3lyp",
+                basis="def2-svp",
+                task="single_point",
+                success=True,
+            )
+        ],
+    )
+
+    exit_code = main(
+        [
+            "export-properties",
+            str(results_path),
+            "--type",
+            "charges",
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    header = out_path.read_text(encoding="utf-8").splitlines()[0]
+    assert exit_code == 0
+    assert "No charges property rows found" in captured.out
+    assert "charge_e" in header
+
+
 def test_plot_pathway_command_writes_png(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / "mpl"))
     table_path = tmp_path / "reaction_table.csv"
@@ -2338,6 +2494,88 @@ def test_triage_command_writes_failed_jobs_markdown(tmp_path, capsys):
     assert "missing_energy" in captured.out
     assert "# Failed job triage" in report
     assert "missing-energy" in report
+
+
+def _property_export_result() -> CalculationResult:
+    return CalculationResult(
+        species_name="water",
+        backend="gaussian",
+        method="b3lyp",
+        basis="def2-svp",
+        task="freq",
+        success=True,
+        source_path="synthetic_property_fixture.log",
+        properties=CalculationProperties(
+            dipole_moment=DipoleMoment(
+                x_debye=0.1,
+                y_debye=0.2,
+                z_debye=0.3,
+                total_debye=0.374,
+                source_backend="gaussian",
+                source_section_label="Dipole moment",
+            ),
+            population_analyses=(
+                PopulationAnalysis(
+                    scheme="Mulliken",
+                    atomic_charges=(
+                        AtomicCharge(
+                            atom_index=1,
+                            symbol="O",
+                            charge_e=-0.3,
+                            scheme="Mulliken",
+                        ),
+                        AtomicCharge(
+                            atom_index=2,
+                            symbol="H",
+                            charge_e=0.15,
+                            scheme="Mulliken",
+                        ),
+                    ),
+                    source_backend="gaussian",
+                    source_section_label="Mulliken charges",
+                ),
+            ),
+            orbital_table=OrbitalTable(
+                backend="gaussian",
+                orbitals=(
+                    MolecularOrbital(
+                        index=4,
+                        energy_hartree=-0.2,
+                        energy_ev=-5.442,
+                        occupation=1.0,
+                        spin_channel="alpha",
+                    ),
+                    MolecularOrbital(
+                        index=5,
+                        energy_hartree=0.1,
+                        energy_ev=2.721,
+                        occupation=0.0,
+                        spin_channel="beta",
+                    ),
+                ),
+                homo_index=4,
+                lumo_index=5,
+                source_section_label="Orbital eigenvalues",
+            ),
+            vibrational_modes=(
+                VibrationalMode(
+                    mode_index=1,
+                    frequency_cm1=-120.0,
+                    ir_intensity_km_mol=3.0,
+                    is_imaginary=True,
+                ),
+            ),
+            excitations=(
+                ExcitedState(
+                    state_index=1,
+                    energy_ev=3.1,
+                    wavelength_nm=399.95,
+                    spin_multiplicity_label="Singlet",
+                    transition_description="synthetic fixture transition",
+                ),
+            ),
+        ),
+    )
 
 
 def _write_ranking_campaign(tmp_path, *, ranking: str):

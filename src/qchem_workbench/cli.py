@@ -79,6 +79,11 @@ from qchem_workbench.core.species import Species
 from qchem_workbench.campaigns import load_campaign_manifest
 from qchem_workbench.core.structure import AtomisticStructure
 from qchem_workbench.projects.manifest import ProjectManifest, load_project_manifest
+from qchem_workbench.reports.exports import (
+    PROPERTY_EXPORT_TYPES,
+    property_rows_for_type,
+    property_rows_to_csv,
+)
 from qchem_workbench.reports.markdown import write_markdown_report
 from qchem_workbench.reports.plotting import plot_pathway_from_csv
 from qchem_workbench.reports.spectrum import SPECTRUM_TYPES, plot_vibrational_spectrum
@@ -376,6 +381,18 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--species", type=Path)
     report_parser.add_argument("--out", required=True, type=Path)
     report_parser.set_defaults(func=_report_command)
+
+    export_properties_parser = subparsers.add_parser(
+        "export-properties", help="export parsed molecular properties to CSV"
+    )
+    export_properties_parser.add_argument("results", type=Path)
+    export_properties_parser.add_argument(
+        "--type",
+        choices=PROPERTY_EXPORT_TYPES,
+        help="property table to export; omit to export all non-empty property tables",
+    )
+    export_properties_parser.add_argument("--out", required=True, type=Path)
+    export_properties_parser.set_defaults(func=_export_properties_command)
 
     plot_pathway_parser = subparsers.add_parser(
         "plot-pathway", help="plot a generic reaction pathway table"
@@ -899,6 +916,47 @@ def _report_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Wrote Markdown report to {args.out}.")
+    return 0
+
+
+def _export_properties_command(args: argparse.Namespace) -> int:
+    try:
+        results = load_result_collection(args.results)
+        if args.type is not None:
+            rows = property_rows_for_type(results, args.type)
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(property_rows_to_csv(args.type, rows), encoding="utf-8")
+            if not rows:
+                print(
+                    f"No {args.type} property rows found; "
+                    f"wrote header to {args.out}."
+                )
+            else:
+                print(f"Wrote {len(rows)} {args.type} property row(s) to {args.out}.")
+            return 0
+
+        written: list[tuple[str, int, Path]] = []
+        args.out.mkdir(parents=True, exist_ok=True)
+        for property_type in PROPERTY_EXPORT_TYPES:
+            rows = property_rows_for_type(results, property_type)
+            if not rows:
+                continue
+            output_path = args.out / f"{property_type}.csv"
+            output_path.write_text(
+                property_rows_to_csv(property_type, rows),
+                encoding="utf-8",
+            )
+            written.append((property_type, len(rows), output_path))
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if not written:
+        print("No property rows found; no files written.")
+        return 0
+
+    for property_type, row_count, output_path in written:
+        print(f"Wrote {row_count} {property_type} property row(s) to {output_path}.")
     return 0
 
 

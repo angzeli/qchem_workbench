@@ -12,6 +12,13 @@ from qchem_workbench.core.species import Species
 
 
 MISSING_TEXT = "N/A"
+PROPERTY_EXPORT_TYPES = (
+    "dipoles",
+    "charges",
+    "orbitals",
+    "vibrations",
+    "excitations",
+)
 
 
 def results_to_csv(results: Iterable[CalculationResult]) -> str:
@@ -84,6 +91,32 @@ def reaction_rows_to_csv(rows: Iterable[ReactionEnergyRow]) -> str:
         for row in rows
     ]
     return _dict_rows_to_csv(csv_rows, _REACTION_HEADERS)
+
+
+def property_rows_for_type(
+    results: Iterable[CalculationResult],
+    property_type: str,
+) -> list[dict[str, str]]:
+    """Return tidy property rows for *property_type*."""
+
+    result_list = list(results)
+    if property_type == "dipoles":
+        return _dipole_rows(result_list)
+    if property_type == "charges":
+        return _charge_rows(result_list)
+    if property_type == "orbitals":
+        return _orbital_rows(result_list)
+    if property_type == "vibrations":
+        return _vibration_rows(result_list)
+    if property_type == "excitations":
+        return _excitation_rows(result_list)
+    raise ValueError(f"unsupported property export type {property_type!r}")
+
+
+def property_rows_to_csv(property_type: str, rows: list[dict[str, str]]) -> str:
+    """Return CSV text for property rows of *property_type*."""
+
+    return _dict_rows_to_csv(rows, _PROPERTY_HEADERS[property_type])
 
 
 def results_to_latex_tabular(results: Iterable[CalculationResult]) -> str:
@@ -202,6 +235,251 @@ _REACTION_HEADERS = [
     "Missing species",
     "Notes",
 ]
+
+_PROPERTY_BASE_HEADERS = [
+    "species",
+    "backend",
+    "method",
+    "basis",
+    "task",
+    "source_path",
+]
+
+_PROPERTY_HEADERS = {
+    "dipoles": [
+        *_PROPERTY_BASE_HEADERS,
+        "property_backend",
+        "source_section",
+        "x_debye",
+        "y_debye",
+        "z_debye",
+        "total_debye",
+        "unit",
+    ],
+    "charges": [
+        *_PROPERTY_BASE_HEADERS,
+        "property_backend",
+        "source_section",
+        "scheme",
+        "atom_index",
+        "element_symbol",
+        "atom_label",
+        "charge_e",
+        "charge_unit",
+        "warnings",
+    ],
+    "orbitals": [
+        *_PROPERTY_BASE_HEADERS,
+        "table_backend",
+        "source_section",
+        "orbital_index",
+        "energy_hartree",
+        "energy_hartree_unit",
+        "energy_ev",
+        "energy_ev_unit",
+        "occupation",
+        "spin_channel",
+        "symmetry_label",
+        "homo_index",
+        "lumo_index",
+        "warnings",
+    ],
+    "vibrations": [
+        *_PROPERTY_BASE_HEADERS,
+        "mode_index",
+        "frequency_cm1",
+        "frequency_unit",
+        "ir_intensity_km_mol",
+        "ir_intensity_unit",
+        "raman_activity_angstrom4_amu",
+        "raman_activity_unit",
+        "reduced_mass_amu",
+        "reduced_mass_unit",
+        "force_constant_mdyne_angstrom",
+        "force_constant_unit",
+        "is_imaginary",
+    ],
+    "excitations": [
+        *_PROPERTY_BASE_HEADERS,
+        "state_index",
+        "state_label",
+        "spin_multiplicity_label",
+        "energy_ev",
+        "energy_unit",
+        "wavelength_nm",
+        "wavelength_unit",
+        "oscillator_strength",
+        "transition_description",
+        "warnings",
+    ],
+}
+
+
+def _dipole_rows(results: list[CalculationResult]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for result in results:
+        dipole = result.properties.dipole_moment
+        if dipole is None:
+            continue
+        row = _property_base_row(result)
+        row.update(
+            {
+                "property_backend": _csv_value(dipole.source_backend or result.backend),
+                "source_section": _csv_value(dipole.source_section_label),
+                "x_debye": _csv_value(dipole.x_debye),
+                "y_debye": _csv_value(dipole.y_debye),
+                "z_debye": _csv_value(dipole.z_debye),
+                "total_debye": _csv_value(dipole.total_debye),
+                "unit": dipole.unit,
+            }
+        )
+        rows.append(row)
+    return rows
+
+
+def _charge_rows(results: list[CalculationResult]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for result in results:
+        analyses = result.properties.population_analyses
+        if analyses:
+            for analysis in analyses:
+                for charge in analysis.atomic_charges:
+                    row = _property_base_row(result)
+                    row.update(
+                        {
+                            "property_backend": _csv_value(
+                                analysis.source_backend or result.backend
+                            ),
+                            "source_section": _csv_value(
+                                analysis.source_section_label
+                            ),
+                            "scheme": analysis.scheme,
+                            "atom_index": _csv_value(charge.atom_index),
+                            "element_symbol": _csv_value(charge.symbol),
+                            "atom_label": _csv_value(charge.atom_label),
+                            "charge_e": _csv_value(charge.charge_e),
+                            "charge_unit": charge.charge_unit,
+                            "warnings": ";".join(analysis.warnings),
+                        }
+                    )
+                    rows.append(row)
+            continue
+
+        for charge in result.properties.atomic_charges:
+            row = _property_base_row(result)
+            row.update(
+                {
+                    "property_backend": result.backend,
+                    "source_section": "",
+                    "scheme": _csv_value(charge.scheme),
+                    "atom_index": _csv_value(charge.atom_index),
+                    "element_symbol": _csv_value(charge.symbol),
+                    "atom_label": _csv_value(charge.atom_label),
+                    "charge_e": _csv_value(charge.charge_e),
+                    "charge_unit": charge.charge_unit,
+                    "warnings": "",
+                }
+            )
+            rows.append(row)
+    return rows
+
+
+def _orbital_rows(results: list[CalculationResult]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for result in results:
+        table = result.properties.orbital_table
+        if table is None:
+            continue
+        for orbital in table.orbitals:
+            row = _property_base_row(result)
+            row.update(
+                {
+                    "table_backend": _csv_value(table.backend or result.backend),
+                    "source_section": _csv_value(table.source_section_label),
+                    "orbital_index": _csv_value(orbital.index),
+                    "energy_hartree": _csv_value(orbital.energy_hartree),
+                    "energy_hartree_unit": orbital.hartree_unit,
+                    "energy_ev": _csv_value(orbital.energy_ev),
+                    "energy_ev_unit": orbital.ev_unit,
+                    "occupation": _csv_value(orbital.occupation),
+                    "spin_channel": _csv_value(orbital.spin_channel),
+                    "symmetry_label": _csv_value(orbital.symmetry_label),
+                    "homo_index": _csv_value(table.homo_index),
+                    "lumo_index": _csv_value(table.lumo_index),
+                    "warnings": ";".join(table.warnings),
+                }
+            )
+            rows.append(row)
+    return rows
+
+
+def _vibration_rows(results: list[CalculationResult]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for result in results:
+        for mode in result.properties.vibrational_modes:
+            row = _property_base_row(result)
+            row.update(
+                {
+                    "mode_index": _csv_value(mode.mode_index),
+                    "frequency_cm1": _csv_value(mode.frequency_cm1),
+                    "frequency_unit": mode.frequency_unit,
+                    "ir_intensity_km_mol": _csv_value(mode.ir_intensity_km_mol),
+                    "ir_intensity_unit": mode.ir_intensity_unit,
+                    "raman_activity_angstrom4_amu": _csv_value(
+                        mode.raman_activity_angstrom4_amu
+                    ),
+                    "raman_activity_unit": mode.raman_activity_unit,
+                    "reduced_mass_amu": _csv_value(mode.reduced_mass_amu),
+                    "reduced_mass_unit": mode.reduced_mass_unit,
+                    "force_constant_mdyne_angstrom": _csv_value(
+                        mode.force_constant_mdyne_angstrom
+                    ),
+                    "force_constant_unit": mode.force_constant_unit,
+                    "is_imaginary": _csv_value(mode.is_imaginary),
+                }
+            )
+            rows.append(row)
+    return rows
+
+
+def _excitation_rows(results: list[CalculationResult]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for result in results:
+        for excitation in result.properties.excitations:
+            row = _property_base_row(result)
+            row.update(
+                {
+                    "state_index": _csv_value(excitation.state_index),
+                    "state_label": _csv_value(excitation.state_label),
+                    "spin_multiplicity_label": _csv_value(
+                        excitation.spin_multiplicity_label
+                    ),
+                    "energy_ev": _csv_value(excitation.energy_ev),
+                    "energy_unit": excitation.energy_unit,
+                    "wavelength_nm": _csv_value(excitation.wavelength_nm),
+                    "wavelength_unit": excitation.wavelength_unit,
+                    "oscillator_strength": _csv_value(
+                        excitation.oscillator_strength
+                    ),
+                    "transition_description": _csv_value(
+                        excitation.transition_description
+                    ),
+                    "warnings": ";".join(excitation.warnings),
+                }
+            )
+            rows.append(row)
+    return rows
+
+
+def _property_base_row(result: CalculationResult) -> dict[str, str]:
+    return {
+        "species": result.species_name,
+        "backend": result.backend,
+        "method": _csv_value(result.method),
+        "basis": _csv_value(result.basis),
+        "task": _csv_value(result.task),
+        "source_path": str(result.source_path) if result.source_path else "",
+    }
 
 
 def _dict_rows_to_csv(rows: list[dict[str, str]], fieldnames: list[str]) -> str:
