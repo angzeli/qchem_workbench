@@ -39,6 +39,10 @@ _ORCA_IR_VALUE_RE = re.compile(
 _ORCA_RAMAN_VALUE_RE = re.compile(
     rf"\bRaman(?:\s+Activity)?\s*(?:=|:)?\s*({_NUMBER})", re.IGNORECASE
 )
+_IR_SPECTRUM_HEADER_RE = re.compile(r"^\s*IR\s+SPECTRUM\b", re.IGNORECASE)
+_IR_SPECTRUM_ROW_RE = re.compile(
+    rf"^\s*(\d+)\s+({_NUMBER})\s+({_NUMBER})\s*$"
+)
 _ORCA_EXCITATION_RE = re.compile(
     rf"^\s*STATE\s+(\d+)\s*:\s*(?:E\s*=\s*)?({_NUMBER})\s*eV"
     rf"(?:\s+({_NUMBER})\s*nm)?(?:.*?\bf\s*=\s*({_NUMBER}))?",
@@ -334,6 +338,20 @@ def _extract_vibrational_modes(text: str, warnings: list[str]) -> list[Vibration
     malformed_rows = 0
 
     for index, line in enumerate(lines):
+        if _IR_SPECTRUM_HEADER_RE.match(line):
+            parsed_rows, malformed = _parse_ir_spectrum_rows(lines[index + 1 :])
+            malformed_rows += malformed
+            for frequency, intensity in parsed_rows:
+                modes.append(
+                    VibrationalMode(
+                        mode_index=len(modes) + 1,
+                        frequency_cm1=frequency,
+                        ir_intensity_km_mol=intensity,
+                        is_imaginary=frequency < 0.0,
+                    )
+                )
+            continue
+
         line_match = _FREQUENCIES_LINE_RE.search(line)
         if line_match:
             frequencies, malformed = _parse_float_tokens(line_match.group(1).split())
@@ -358,6 +376,7 @@ def _extract_vibrational_modes(text: str, warnings: list[str]) -> list[Vibration
             for mode_index, frequency in enumerate(frequencies):
                 modes.append(
                     VibrationalMode(
+                        mode_index=len(modes) + 1,
                         frequency_cm1=frequency,
                         ir_intensity_km_mol=(
                             ir_values[mode_index]
@@ -383,6 +402,7 @@ def _extract_vibrational_modes(text: str, warnings: list[str]) -> list[Vibration
             raman_match = _ORCA_RAMAN_VALUE_RE.search(line)
             modes.append(
                 VibrationalMode(
+                    mode_index=len(modes) + 1,
                     frequency_cm1=frequency,
                     ir_intensity_km_mol=(
                         _parse_float(ir_match.group(1)) if ir_match else None
@@ -399,6 +419,29 @@ def _extract_vibrational_modes(text: str, warnings: list[str]) -> list[Vibration
     if malformed_tokens or malformed_rows:
         warnings.append("Malformed ORCA frequency value(s) were ignored.")
     return modes
+
+
+def _parse_ir_spectrum_rows(lines: list[str]) -> tuple[list[tuple[float, float]], int]:
+    rows: list[tuple[float, float]] = []
+    malformed = 0
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if rows:
+                break
+            continue
+        if set(stripped) <= {"-", " "}:
+            continue
+        if stripped.lower().startswith(("mode", "index", "freq")):
+            continue
+        match = _IR_SPECTRUM_ROW_RE.match(line)
+        if match:
+            rows.append((_parse_float(match.group(2)), _parse_float(match.group(3))))
+            continue
+        if rows:
+            malformed += 1
+            break
+    return rows, malformed
 
 
 def _parse_float_tokens(tokens: list[str]) -> tuple[list[float], int]:

@@ -128,6 +128,7 @@ def test_parse_orca_vibrational_spectrum_properties(tmp_path):
     modes = result.properties.vibrational_modes
 
     assert [mode.frequency_cm1 for mode in modes] == [-12.5, 100.0]
+    assert [mode.mode_index for mode in modes] == [1, 2]
     assert [mode.ir_intensity_km_mol for mode in modes] == [1.2, 2.3]
     assert [mode.raman_activity_angstrom4_amu for mode in modes] == [0.4, 0.5]
     assert [mode.is_imaginary for mode in modes] == [True, False]
@@ -146,8 +147,29 @@ def test_parse_orca_row_vibrational_properties(tmp_path):
     mode = result.properties.vibrational_modes[0]
 
     assert mode.frequency_cm1 == 100.0
+    assert mode.mode_index == 1
     assert mode.ir_intensity_km_mol == 12.5
     assert mode.raman_activity_angstrom4_amu == 3.0
+
+
+def test_parse_orca_ir_spectrum_section(tmp_path):
+    output_path = tmp_path / "ir-spectrum.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP Freq\n"
+        "IR SPECTRUM\n"
+        " Mode    Frequency    Intensity\n"
+        "  0      100.0000     12.5000\n"
+        "  1      250.0000     30.0000\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+    modes = result.properties.vibrational_modes
+
+    assert [mode.frequency_cm1 for mode in modes] == [100.0, 250.0]
+    assert [mode.ir_intensity_km_mol for mode in modes] == [12.5, 30.0]
+    assert [mode.is_imaginary for mode in modes] == [False, False]
 
 
 def test_parse_orca_imaginary_frequency_quality_metadata(tmp_path):
