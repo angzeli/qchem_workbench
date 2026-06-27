@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from qchem_workbench.backends.gaussian_parser import parse_gaussian_output
+from qchem_workbench.core.units import HARTREE_TO_EV
 
 
 def test_parse_gaussian_normal_termination(tmp_path):
@@ -432,6 +435,97 @@ def test_parse_gaussian_duplicate_charge_scheme_uses_last(tmp_path):
 
     assert result.properties.population_analyses[0].atomic_charges[0].charge_e == 0.2
     assert any("Multiple Gaussian Mulliken charge sections" in warning for warning in result.warnings)
+
+
+def test_parse_gaussian_closed_shell_orbital_table(tmp_path):
+    output_path = tmp_path / "orbitals.log"
+    output_path.write_text(
+        " # rb3lyp/6-31g\n"
+        " Alpha  occ. eigenvalues --   -0.5000   -0.3000\n"
+        " Alpha virt. eigenvalues --    0.1000    0.2000\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    table = result.properties.orbital_table
+
+    assert table is not None
+    assert len(table.orbitals) == 4
+    assert table.homo_index == 2
+    assert table.lumo_index == 3
+    assert table.orbitals[0].energy_hartree == -0.5
+    assert table.orbitals[0].energy_ev == pytest.approx(-0.5 * HARTREE_TO_EV)
+    assert result.homo_ev == pytest.approx(-0.3 * HARTREE_TO_EV)
+    assert result.lumo_ev == pytest.approx(0.1 * HARTREE_TO_EV)
+    assert result.gap_ev == pytest.approx(0.4 * HARTREE_TO_EV)
+
+
+def test_parse_gaussian_unrestricted_alpha_beta_orbitals(tmp_path):
+    output_path = tmp_path / "unrestricted-orbitals.log"
+    output_path.write_text(
+        " # ub3lyp/6-31g\n"
+        " Alpha  occ. eigenvalues --   -0.6000   -0.2500\n"
+        " Alpha virt. eigenvalues --    0.1200\n"
+        " Beta  occ. eigenvalues --    -0.5500   -0.2000\n"
+        " Beta virt. eigenvalues --     0.0800\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    table = result.properties.orbital_table
+
+    assert table is not None
+    assert [orbital.spin_channel for orbital in table.orbitals] == [
+        "alpha",
+        "alpha",
+        "alpha",
+        "beta",
+        "beta",
+        "beta",
+    ]
+    assert table.homo_index == 5
+    assert table.lumo_index == 6
+    assert result.homo_ev == pytest.approx(-0.2 * HARTREE_TO_EV)
+    assert result.lumo_ev == pytest.approx(0.08 * HARTREE_TO_EV)
+
+
+def test_parse_gaussian_occupied_only_orbitals_warn(tmp_path):
+    output_path = tmp_path / "occupied-only.log"
+    output_path.write_text(
+        " # rb3lyp/6-31g\n"
+        " occ. eigenvalues --   -0.5000   -0.3000\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    table = result.properties.orbital_table
+
+    assert table is not None
+    assert table.homo_index == 2
+    assert table.lumo_index is None
+    assert result.homo_ev == pytest.approx(-0.3 * HARTREE_TO_EV)
+    assert result.lumo_ev is None
+    assert any("Incomplete Gaussian orbital eigenvalue" in warning for warning in result.warnings)
+
+
+def test_parse_gaussian_malformed_orbital_line_warns(tmp_path):
+    output_path = tmp_path / "malformed-orbitals.log"
+    output_path.write_text(
+        " # rb3lyp/6-31g\n"
+        " occ. eigenvalues --   bad-token   -0.3000\n"
+        " virt. eigenvalues --   0.1000\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.properties.orbital_table is not None
+    assert len(result.properties.orbital_table.orbitals) == 2
+    assert any("Malformed Gaussian orbital eigenvalue" in warning for warning in result.warnings)
 
 
 def test_parse_unrestricted_spin_info(tmp_path):

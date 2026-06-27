@@ -10,11 +10,14 @@ from qchem_workbench.core.properties import (
     CalculationProperties,
     DipoleMoment,
     ElectronicExcitation,
+    MolecularOrbital,
+    OrbitalTable,
     PopulationAnalysis,
     VibrationalMode,
     wavelength_nm_from_ev,
 )
 from qchem_workbench.core.result import CalculationResult
+from qchem_workbench.core.units import HARTREE_TO_EV
 
 
 _NUMBER = r"[-+]?\d+(?:\.\d+)?(?:[DEde][-+]?\d+)?"
@@ -51,6 +54,10 @@ _CHARGE_SECTION_RE = re.compile(
 )
 _CHARGE_ROW_RE = re.compile(
     rf"^\s*(\d+)\s+([A-Z][a-z]?)(?:\s+\S+)?\s+({_NUMBER})\s*$"
+)
+_ORBITAL_EIGENVALUE_RE = re.compile(
+    r"^\s*(?:(Alpha|Beta)\s+)?(occ\.|virt\.)\s+eigenvalues\s+--\s+(.+)$",
+    re.IGNORECASE,
 )
 _THERMOCHEMISTRY_PATTERNS = {
     "zero_point_correction_hartree": re.compile(
@@ -128,6 +135,8 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
         for analysis in population_analyses
         for charge in analysis.atomic_charges
     )
+    orbital_table = _extract_orbital_table(text, warnings)
+    homo_ev, lumo_ev, gap_ev = _orbital_summary_from_table(orbital_table)
     frequencies = [
         float(mode.frequency_cm1)
         for mode in vibrational_modes
@@ -183,6 +192,9 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
         sum_electronic_thermal_free_energy_hartree=thermochemistry.get(
             "sum_electronic_thermal_free_energy_hartree"
         ),
+        homo_ev=homo_ev,
+        lumo_ev=lumo_ev,
+        gap_ev=gap_ev,
         warnings=warnings,
         metadata=metadata,
         source_path=source_path,
@@ -192,6 +204,7 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
             dipole_moment=dipole_moment,
             atomic_charges=atomic_charges,
             population_analyses=tuple(population_analyses),
+            orbital_table=orbital_table,
         ),
     )
 
@@ -483,6 +496,111 @@ def _normalise_charge_scheme(raw_scheme: str) -> str:
     if lower.startswith("natural population"):
         return "NPA"
     return raw_scheme.upper()
+
+
+def _extract_orbital_table(text: str, warnings: list[str]) -> OrbitalTable | None:
+    parsed_lines: list[tuple[str | None, str, list[float]]] = []
+    malformed_tokens = 0
+
+    for line in text.splitlines():
+        match = _ORBITAL_EIGENVALUE_RE.match(line)
+        if not match:
+            continue
+        spin_channel = match.group(1).lower() if match.group(1) else None
+        kind = match.group(2).lower()
+        values, malformed = _parse_float_tokens(match.group(3).split())
+        malformed_tokens += malformed
+        if values:
+            parsed_lines.append((spin_channel, kind, values))
+
+    if malformed_tokens:
+        warnings.append(
+            "Malformed Gaussian orbital eigenvalue token(s) were ignored."
+        )
+    if not parsed_lines:
+        return None
+
+    has_beta = any(spin_channel == "beta" for spin_channel, _, _ in parsed_lines)
+    has_occupied = any(kind == "occ." for _, kind, _ in parsed_lines)
+    has_virtual = any(kind == "virt." for _, kind, _ in parsed_lines)
+    table_warnings: list[str] = []
+    if not (has_occupied and has_virtual):
+        message = (
+            "Incomplete Gaussian orbital eigenvalue section; HOMO/LUMO may be "
+            "missing."
+        )
+        table_warnings.append(message)
+        warnings.append(message)
+
+    orbitals: list[MolecularOrbital] = []
+    for spin_channel, kind, values in parsed_lines:
+        occupation = _orbital_occupation(kind, spin_channel, has_beta)
+        for value in values:
+            orbitals.append(
+                MolecularOrbital(
+                    index=len(orbitals) + 1,
+                    energy_hartree=value,
+                    energy_ev=value * HARTREE_TO_EV,
+                    occupation=occupation,
+                    spin_channel=spin_channel,
+                )
+            )
+
+    homo, lumo = _homo_lumo_orbitals(orbitals)
+    return OrbitalTable(
+        backend="gaussian",
+        orbitals=tuple(orbitals),
+        homo_index=homo.index if homo else None,
+        lumo_index=lumo.index if lumo else None,
+        warnings=tuple(table_warnings),
+        source_section_label="Orbital eigenvalues",
+    )
+
+
+def _orbital_occupation(
+    kind: str,
+    spin_channel: str | None,
+    has_beta: bool,
+) -> float:
+    if kind != "occ.":
+        return 0.0
+    if has_beta or spin_channel in {"alpha", "beta"}:
+        return 1.0
+    return 2.0
+
+
+def _homo_lumo_orbitals(
+    orbitals: list[MolecularOrbital] | tuple[MolecularOrbital, ...],
+) -> tuple[MolecularOrbital | None, MolecularOrbital | None]:
+    occupied = [
+        orbital
+        for orbital in orbitals
+        if orbital.occupation is not None
+        and orbital.occupation > 0.0
+        and orbital.energy_ev is not None
+    ]
+    virtual = [
+        orbital
+        for orbital in orbitals
+        if orbital.occupation is not None
+        and orbital.occupation == 0.0
+        and orbital.energy_ev is not None
+    ]
+    homo = max(occupied, key=lambda orbital: orbital.energy_ev) if occupied else None
+    lumo = min(virtual, key=lambda orbital: orbital.energy_ev) if virtual else None
+    return homo, lumo
+
+
+def _orbital_summary_from_table(
+    orbital_table: OrbitalTable | None,
+) -> tuple[float | None, float | None, float | None]:
+    if orbital_table is None:
+        return None, None, None
+    homo, lumo = _homo_lumo_orbitals(orbital_table.orbitals)
+    homo_ev = homo.energy_ev if homo else None
+    lumo_ev = lumo.energy_ev if lumo else None
+    gap_ev = lumo_ev - homo_ev if homo_ev is not None and lumo_ev is not None else None
+    return homo_ev, lumo_ev, gap_ev
 
 
 def _extract_spin_metadata(text: str, warnings: list[str]) -> dict[str, float]:
