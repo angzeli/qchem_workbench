@@ -31,9 +31,12 @@ _FORCE_CONSTANTS_RE = re.compile(r"Frc\s+consts\s+--\s+(.+)", re.IGNORECASE)
 _IR_INTENSITIES_RE = re.compile(r"IR\s+Inten\s+--\s+(.+)", re.IGNORECASE)
 _RAMAN_ACTIVITIES_RE = re.compile(r"Raman\s+Activ\s+--\s+(.+)", re.IGNORECASE)
 _EXCITED_STATE_RE = re.compile(
-    rf"Excited\s+State\s+(\d+):\s+(.+?)\s+({_NUMBER})\s+eV"
+    rf"^\s*Excited\s+State\s+(\d+):\s+(.+?)\s+({_NUMBER})\s+eV"
     rf"(?:\s+({_NUMBER})\s+nm)?(?:.*?\bf\s*=\s*({_NUMBER}))?",
     re.IGNORECASE,
+)
+_TD_TRANSITION_RE = re.compile(
+    r"^\s*([A-Za-z0-9_.+\-]+\s*(?:->|<-)\s*[A-Za-z0-9_.+\-]+.*)$"
 )
 _SPIN_LINE_RE = re.compile(r"S\*\*2\s+before\s+annihilation", re.IGNORECASE)
 _SPIN_VALUES_RE = re.compile(
@@ -128,7 +131,7 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
 
     thermochemistry = _extract_thermochemistry(text, warnings)
     vibrational_modes = _extract_vibrational_modes(text, warnings)
-    excitations = _extract_excitations(text)
+    excitations = _extract_excitations(text, warnings)
     atom_count = _extract_atom_count(text)
     dipole_moment = _extract_dipole_moment(text, warnings)
     population_analyses = _extract_population_analyses(text, warnings, atom_count)
@@ -377,10 +380,21 @@ def _parse_float_tokens(tokens: list[str]) -> tuple[list[float], int]:
     return values, malformed
 
 
-def _extract_excitations(text: str) -> list[ElectronicExcitation]:
+def _extract_excitations(
+    text: str,
+    warnings: list[str],
+) -> list[ElectronicExcitation]:
     excitations: list[ElectronicExcitation] = []
-    for match in _EXCITED_STATE_RE.finditer(text):
-        state_index = match.group(1)
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if "excited state" not in line.lower():
+            continue
+        match = _EXCITED_STATE_RE.match(line)
+        if not match:
+            warnings.append("Malformed Gaussian excited-state line was ignored.")
+            continue
+
+        state_index = int(match.group(1))
         state_label = match.group(2).strip()
         energy_ev = _parse_float(match.group(3))
         wavelength_nm = (
@@ -391,15 +405,33 @@ def _extract_excitations(text: str) -> list[ElectronicExcitation]:
         oscillator_strength = (
             _parse_float(match.group(5)) if match.group(5) is not None else None
         )
+        transition_description = _extract_transition_description(lines[index + 1 :])
         excitations.append(
             ElectronicExcitation(
                 energy_ev=energy_ev,
+                state_index=state_index,
                 wavelength_nm=wavelength_nm,
                 oscillator_strength=oscillator_strength,
+                spin_multiplicity_label=state_label,
+                transition_description=transition_description,
                 state_label=f"Excited State {state_index}: {state_label}",
             )
         )
     return excitations
+
+
+def _extract_transition_description(lines: list[str]) -> str | None:
+    transitions: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            break
+        if "excited state" in stripped.lower():
+            break
+        match = _TD_TRANSITION_RE.match(line)
+        if match:
+            transitions.append(" ".join(match.group(1).split()))
+    return "; ".join(transitions) if transitions else None
 
 
 def _extract_atom_count(text: str) -> int | None:

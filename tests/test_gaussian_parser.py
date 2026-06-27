@@ -312,6 +312,8 @@ def test_parse_gaussian_excitation_fixture(tmp_path):
     excitation = result.properties.excitations[0]
 
     assert excitation.energy_ev == 4.0
+    assert excitation.state_index == 1
+    assert excitation.spin_multiplicity_label == "Singlet-A"
     assert excitation.wavelength_nm == 309.9605
     assert excitation.oscillator_strength == 0.1234
     assert excitation.state_label == "Excited State 1: Singlet-A"
@@ -329,6 +331,56 @@ def test_parse_gaussian_excitation_computes_missing_wavelength(tmp_path):
     result = parse_gaussian_output(output_path)
 
     assert result.properties.excitations[0].wavelength_nm == 619.9209921660013
+
+
+def test_parse_gaussian_multiple_tddft_states_and_transition(tmp_path):
+    output_path = tmp_path / "td-multiple.log"
+    output_path.write_text(
+        " # td b3lyp/def2svp\n"
+        " Excited State   1:      Singlet-A      4.0000 eV  309.9605 nm  f=0.1234\n"
+        "       20 -> 21        0.70123\n"
+        "\n"
+        " Excited State   2:      Singlet-B      5.0000 eV  247.9684 nm  f=0.0200\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    first, second = result.properties.excitations
+
+    assert first.state_index == 1
+    assert first.transition_description == "20 -> 21 0.70123"
+    assert second.state_index == 2
+    assert second.energy_ev == 5.0
+
+
+def test_parse_gaussian_malformed_excited_state_warns(tmp_path):
+    output_path = tmp_path / "td-malformed.log"
+    output_path.write_text(
+        " # td b3lyp/def2svp\n"
+        " Excited State   bad line without energy\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.properties.excitations == ()
+    assert any("Malformed Gaussian excited-state line" in warning for warning in result.warnings)
+
+
+def test_parse_gaussian_without_tddft_section_has_no_excitations(tmp_path):
+    output_path = tmp_path / "no-td.log"
+    output_path.write_text(
+        " # b3lyp/def2svp\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.success is True
+    assert result.properties.excitations == ()
 
 
 def test_parse_gaussian_dipole_moment(tmp_path):
