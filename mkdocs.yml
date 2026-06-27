@@ -10,6 +10,7 @@ nav:
   - Species Registry: species_registry.md
   - Backend Adapters: backend_adapters.md
   - Parsers: parsers.md
+  - Molecular Property Parsing: property_parsing.md
   - Analysis Workflows: analysis_workflows.md
   - Campaign Workflows: campaign_workflows.md
   - Electrochemistry: electrochemistry.md

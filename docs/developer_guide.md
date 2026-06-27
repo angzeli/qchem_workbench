@@ -146,6 +146,12 @@ Implemented parsing includes:
 - last `SCF Done` electronic energy;
 - thermochemistry corrections and summed values;
 - frequencies, negative-frequency count, and most negative frequency;
+- detailed vibrational mode metadata when the rows are present;
+- dipole moments in Debye;
+- explicit Mulliken, Lowdin, and NPA-style population charge tables;
+- molecular orbital eigenvalue tables and HOMO/LUMO summaries when occupied and
+  virtual sections are explicit;
+- TD-DFT-style excited-state summary lines;
 - `S**2` before and after annihilation when present.
 
 Incomplete files should not crash the parser. Missing values remain missing and
@@ -168,7 +174,12 @@ Implemented parsing includes:
 - final single-point electronic energy;
 - frequencies, negative-frequency count, and most negative frequency;
 - Hartree-labelled thermochemistry corrections when present;
-- eV-labelled HOMO/LUMO summaries when present;
+- detailed vibrational mode metadata when the rows are present;
+- dipole moments in Debye;
+- explicit Mulliken, Lowdin/Loewdin, and NPA population charge tables;
+- molecular orbital tables and HOMO/LUMO summaries when occupations are
+  explicit;
+- excited-state summary lines;
 - `S**2` metadata when present.
 
 ORCA execution remains external. The parser uses synthetic fixtures in tests and

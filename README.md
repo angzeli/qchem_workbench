@@ -186,7 +186,10 @@ qchemwb parse-gaussian examples/basic_molecules/outputs --out /tmp/qchemwb-basic
 ```
 
 Missing parsed values remain missing. Parser warnings are recorded rather than
-filled with invented values.
+filled with invented values. When explicit sections are present, the parser can
+also populate optional property containers such as dipole moments, population
+analyses, molecular orbital tables, vibrational modes, and excited-state
+summaries.
 
 ## ORCA Input And Output
 
@@ -200,6 +203,8 @@ qchemwb parse-orca /path/to/orca_outputs --out /tmp/qchemwb-orca-results.json
 
 The tool does not execute ORCA, does not assume a local ORCA binary path or
 cluster scheduler, and does not require ORCA for CI.
+ORCA property parsing is best-effort and uses the same generic property
+containers as Gaussian parsing when explicit sections are present.
 
 ## ASE Structure Tools
 
@@ -312,6 +317,22 @@ Calculation results keep physically distinct quantities in separate fields:
 
 The result store is transparent JSON. It preserves warnings, metadata, source
 paths, and missing values.
+
+Optional parsed molecular properties live under `properties`. Current property
+containers include dipole moments in Debye, population-analysis charges in
+elementary charge `e`, molecular orbital tables in Hartree/eV, vibrational modes
+with explicit units, and excited-state summaries in eV/nm. These values are
+parser outputs, not standalone scientific conclusions.
+
+Export tidy property CSV files with:
+
+```bash
+qchemwb export-properties results/results.json --out results/properties/
+qchemwb export-properties results/results.json --type charges --out charges.csv
+```
+
+See `docs/property_parsing.md` for supported Gaussian/ORCA sections, units,
+conversions, and caveats.
 
 Stable result fields include:
 

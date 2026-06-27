@@ -27,6 +27,8 @@ def test_query_backend_capabilities():
     assert gaussian.capabilities.output_parsing is True
     assert gaussian.capabilities.execution is False
     assert gaussian.capabilities.molecular_support is True
+    assert "dipole_moment" in gaussian.capabilities.properties_supported
+    assert "population_analysis" in gaussian.capabilities.properties_supported
     assert "vibrational_frequencies" in gaussian.capabilities.properties_supported
     assert qe.capabilities.periodic_support is True
 

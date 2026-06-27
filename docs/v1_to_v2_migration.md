@@ -30,7 +30,8 @@ Result stores remain transparent JSON files. v2 result records may include
 fields added during v1.x, including:
 
 - `conformer_id` for conformer-aware workflows;
-- `properties` for optional vibrational, excitation, dipole, and charge data;
+- `properties` for optional vibrational modes, excited states, dipole moments,
+  population analyses, and molecular orbital tables;
 - metadata used by parser, quality-check, campaign, and provenance workflows.
 
 Older result records without these optional fields still load with missing

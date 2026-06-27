@@ -22,3 +22,9 @@ specific calculation contains every property.
 
 Gaussian, ORCA, and Quantum ESPRESSO support is input/output adapter support.
 qchem-workbench does not execute those engines in CI or at runtime.
+
+Detailed Gaussian and ORCA property parsing support is documented in
+[`property_parsing.md`](property_parsing.md). Population charges, orbital
+energies, vibrational summaries, and excited-state summaries are stored as
+parsed properties with units and source provenance; they are not interpreted as
+standalone observables or predictions.

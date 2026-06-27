@@ -112,6 +112,8 @@ def built_in_backend_registry() -> BackendRegistry:
                     properties_supported=(
                         "electronic_energy",
                         "thermochemistry",
+                        "dipole_moment",
+                        "population_analysis",
                         "vibrational_frequencies",
                         "orbital_energies",
                         "electronic_excitations",
@@ -134,6 +136,8 @@ def built_in_backend_registry() -> BackendRegistry:
                     properties_supported=(
                         "electronic_energy",
                         "thermochemistry",
+                        "dipole_moment",
+                        "population_analysis",
                         "vibrational_frequencies",
                         "orbital_energies",
                         "electronic_excitations",

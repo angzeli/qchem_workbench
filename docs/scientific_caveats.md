@@ -11,6 +11,11 @@ expert review.
   selectivity, or experimental validation.
 - It does not treat rule-based screening rankings as predictions of activity or
   experimental performance.
+- It does not treat population-analysis charges as direct observables.
+- It does not treat HOMO/LUMO orbital energies as redox potentials or band
+  edges.
+- It does not treat broadened vibrational or TD-DFT-derived spectra as
+  experimental predictions.
 - It keeps electronic energies, Gibbs free energies, correction terms,
   adsorption energies, and CHE-corrected free energies explicitly separated.
 
