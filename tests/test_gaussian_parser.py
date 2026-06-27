@@ -197,6 +197,8 @@ def test_parse_gaussian_vibrational_spectrum_properties(tmp_path):
     output_path.write_text(
         " # wb97xd/6-31g freq\n"
         " Frequencies --   -50.0   100.0   250.0\n"
+        " Red. masses --     1.1     1.2     1.3\n"
+        " Frc consts  --     0.1     0.2     0.3\n"
         " IR Inten    --     1.5     2.5     3.5\n"
         " Raman Activ --     0.1     0.2     0.3\n"
         " Normal termination of Gaussian 16\n",
@@ -207,8 +209,11 @@ def test_parse_gaussian_vibrational_spectrum_properties(tmp_path):
     modes = result.properties.vibrational_modes
 
     assert [mode.frequency_cm1 for mode in modes] == [-50.0, 100.0, 250.0]
+    assert [mode.mode_index for mode in modes] == [1, 2, 3]
     assert [mode.ir_intensity_km_mol for mode in modes] == [1.5, 2.5, 3.5]
     assert [mode.raman_activity_angstrom4_amu for mode in modes] == [0.1, 0.2, 0.3]
+    assert [mode.reduced_mass_amu for mode in modes] == [1.1, 1.2, 1.3]
+    assert [mode.force_constant_mdyne_angstrom for mode in modes] == [0.1, 0.2, 0.3]
     assert [mode.is_imaginary for mode in modes] == [True, False, False]
 
 
@@ -275,6 +280,23 @@ def test_parse_gaussian_missing_intensities_remain_missing(tmp_path):
 
     assert result.properties.vibrational_modes[0].ir_intensity_km_mol is None
     assert result.properties.vibrational_modes[0].raman_activity_angstrom4_amu is None
+
+
+def test_parse_gaussian_ir_intensity_without_raman(tmp_path):
+    output_path = tmp_path / "ir-no-raman.log"
+    output_path.write_text(
+        " # wb97xd/6-31g freq\n"
+        " Frequencies --   100.0   250.5\n"
+        " IR Inten    --     1.5     2.5\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    modes = result.properties.vibrational_modes
+
+    assert [mode.ir_intensity_km_mol for mode in modes] == [1.5, 2.5]
+    assert [mode.raman_activity_angstrom4_amu for mode in modes] == [None, None]
 
 
 def test_parse_gaussian_excitation_fixture(tmp_path):

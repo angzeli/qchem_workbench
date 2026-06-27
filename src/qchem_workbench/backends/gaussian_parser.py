@@ -26,6 +26,8 @@ _SCF_DONE_RE = re.compile(
 )
 _ROUTE_START_RE = re.compile(r"^\s*#")
 _FREQUENCIES_RE = re.compile(r"Frequencies\s+--\s+(.+)")
+_REDUCED_MASSES_RE = re.compile(r"Red\.\s+masses\s+--\s+(.+)", re.IGNORECASE)
+_FORCE_CONSTANTS_RE = re.compile(r"Frc\s+consts\s+--\s+(.+)", re.IGNORECASE)
 _IR_INTENSITIES_RE = re.compile(r"IR\s+Inten\s+--\s+(.+)", re.IGNORECASE)
 _RAMAN_ACTIVITIES_RE = re.compile(r"Raman\s+Activ\s+--\s+(.+)", re.IGNORECASE)
 _EXCITED_STATE_RE = re.compile(
@@ -300,9 +302,21 @@ def _extract_vibrational_modes(
 
         ir_values: list[float] = []
         raman_values: list[float] = []
+        reduced_masses: list[float] = []
+        force_constants: list[float] = []
         for followup in lines[index + 1 :]:
             if _FREQUENCIES_RE.search(followup):
                 break
+            reduced_match = _REDUCED_MASSES_RE.search(followup)
+            if reduced_match:
+                parsed, malformed = _parse_float_tokens(reduced_match.group(1).split())
+                reduced_masses = parsed
+                malformed_property_tokens += malformed
+            force_match = _FORCE_CONSTANTS_RE.search(followup)
+            if force_match:
+                parsed, malformed = _parse_float_tokens(force_match.group(1).split())
+                force_constants = parsed
+                malformed_property_tokens += malformed
             ir_match = _IR_INTENSITIES_RE.search(followup)
             if ir_match:
                 parsed, malformed = _parse_float_tokens(ir_match.group(1).split())
@@ -317,6 +331,7 @@ def _extract_vibrational_modes(
         for mode_index, frequency in enumerate(frequencies):
             modes.append(
                 VibrationalMode(
+                    mode_index=len(modes) + 1,
                     frequency_cm1=frequency,
                     ir_intensity_km_mol=(
                         ir_values[mode_index] if mode_index < len(ir_values) else None
@@ -324,6 +339,16 @@ def _extract_vibrational_modes(
                     raman_activity_angstrom4_amu=(
                         raman_values[mode_index]
                         if mode_index < len(raman_values)
+                        else None
+                    ),
+                    reduced_mass_amu=(
+                        reduced_masses[mode_index]
+                        if mode_index < len(reduced_masses)
+                        else None
+                    ),
+                    force_constant_mdyne_angstrom=(
+                        force_constants[mode_index]
+                        if mode_index < len(force_constants)
                         else None
                     ),
                     is_imaginary=frequency < 0.0,
