@@ -10,11 +10,14 @@ from qchem_workbench.core.properties import (
     CalculationProperties,
     DipoleMoment,
     ElectronicExcitation,
+    MolecularOrbital,
+    OrbitalTable,
     PopulationAnalysis,
     VibrationalMode,
     wavelength_nm_from_ev,
 )
 from qchem_workbench.core.result import CalculationResult
+from qchem_workbench.core.units import HARTREE_TO_EV
 
 
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[DEde][-+]?\d+)?"
@@ -79,6 +82,14 @@ _CHARGE_SECTION_RE = re.compile(
 )
 _CHARGE_ROW_RE = re.compile(
     rf"^\s*(\d+)\s+([A-Z][a-z]?)\s*:?\s+({_NUMBER})\s*$"
+)
+_ORBITAL_SECTION_RE = re.compile(
+    r"^\s*(?:(ALPHA|BETA|SPIN\s+UP|SPIN\s+DOWN)\s+)?"
+    r"(?:ORBITAL\s+ENERGIES|ORBITALS)\b",
+    re.IGNORECASE,
+)
+_ORBITAL_ROW_RE = re.compile(
+    rf"^\s*(\d+)\s+({_NUMBER})\s+({_NUMBER})(?:\s+({_NUMBER}))?\s*$"
 )
 _THERMOCHEMISTRY_PATTERNS = {
     "zero_point_correction_hartree": re.compile(
@@ -181,6 +192,7 @@ def parse_orca_output(path: Path) -> CalculationResult:
         for analysis in population_analyses
         for charge in analysis.atomic_charges
     )
+    orbital_table = _extract_orbital_table(text, warnings)
     frequencies = [
         float(mode.frequency_cm1)
         for mode in vibrational_modes
@@ -192,7 +204,11 @@ def parse_orca_output(path: Path) -> CalculationResult:
             "Negative frequencies found; parser reports values without assigning "
             "transition-state identity."
         )
-    homo_ev, lumo_ev, gap_ev = _extract_orbital_summary(text)
+    homo_ev, lumo_ev, gap_ev = (
+        _orbital_summary_from_table(orbital_table)
+        if orbital_table is not None
+        else _extract_orbital_summary(text)
+    )
     spin_metadata = _extract_spin_metadata(text, warnings)
 
     metadata = {
@@ -241,6 +257,7 @@ def parse_orca_output(path: Path) -> CalculationResult:
             dipole_moment=dipole_moment,
             atomic_charges=atomic_charges,
             population_analyses=tuple(population_analyses),
+            orbital_table=orbital_table,
         ),
     )
 
@@ -538,6 +555,129 @@ def _normalise_charge_scheme(raw_scheme: str) -> str:
     if lower.startswith("mulliken"):
         return "Mulliken"
     return raw_scheme.upper()
+
+
+def _extract_orbital_table(text: str, warnings: list[str]) -> OrbitalTable | None:
+    orbitals: list[MolecularOrbital] = []
+    table_warnings: list[str] = []
+    malformed_rows = 0
+    in_section = False
+    current_spin: str | None = None
+
+    for line in text.splitlines():
+        section_match = _ORBITAL_SECTION_RE.match(line)
+        if section_match:
+            in_section = True
+            current_spin = _normalise_spin_channel(section_match.group(1))
+            continue
+        if not in_section:
+            continue
+
+        stripped = line.strip()
+        if not stripped:
+            if orbitals:
+                in_section = False
+            continue
+        if set(stripped) <= {"-", " "}:
+            continue
+        if stripped.lower().startswith(("no", "index", "orb")):
+            continue
+        if stripped.startswith("*") or "terminated normally" in stripped.lower():
+            in_section = False
+            continue
+
+        row_match = _ORBITAL_ROW_RE.match(line)
+        if row_match:
+            energy_hartree, energy_ev = _orbital_energies_from_row(row_match)
+            orbitals.append(
+                MolecularOrbital(
+                    index=int(row_match.group(1)),
+                    occupation=_parse_float(row_match.group(2)),
+                    energy_hartree=energy_hartree,
+                    energy_ev=energy_ev,
+                    spin_channel=current_spin,
+                )
+            )
+            continue
+
+        if orbitals:
+            malformed_rows += 1
+            in_section = False
+
+    if malformed_rows:
+        message = "Malformed ORCA orbital table row(s) were ignored."
+        warnings.append(message)
+        table_warnings.append(message)
+    if not orbitals:
+        return None
+
+    homo, lumo = _homo_lumo_orbitals(orbitals)
+    if homo is None or lumo is None:
+        message = "Incomplete ORCA orbital table; HOMO/LUMO may be missing."
+        warnings.append(message)
+        table_warnings.append(message)
+
+    return OrbitalTable(
+        backend="orca",
+        orbitals=tuple(orbitals),
+        homo_index=homo.index if homo else None,
+        lumo_index=lumo.index if lumo else None,
+        warnings=tuple(table_warnings),
+        source_section_label="Orbital energies",
+    )
+
+
+def _normalise_spin_channel(raw_spin: str | None) -> str | None:
+    if raw_spin is None:
+        return None
+    normalized = raw_spin.strip().lower().replace(" ", "_")
+    if normalized == "spin_up":
+        return "alpha"
+    if normalized == "spin_down":
+        return "beta"
+    return normalized
+
+
+def _orbital_energies_from_row(
+    row_match: re.Match[str],
+) -> tuple[float | None, float | None]:
+    first_energy = _parse_float(row_match.group(3))
+    second_energy = row_match.group(4)
+    if second_energy is None:
+        return first_energy, first_energy * HARTREE_TO_EV
+    return first_energy, _parse_float(second_energy)
+
+
+def _homo_lumo_orbitals(
+    orbitals: list[MolecularOrbital] | tuple[MolecularOrbital, ...],
+) -> tuple[MolecularOrbital | None, MolecularOrbital | None]:
+    occupied = [
+        orbital
+        for orbital in orbitals
+        if orbital.occupation is not None
+        and orbital.occupation > 0.0
+        and orbital.energy_ev is not None
+    ]
+    virtual = [
+        orbital
+        for orbital in orbitals
+        if orbital.occupation is not None
+        and orbital.occupation == 0.0
+        and orbital.energy_ev is not None
+    ]
+    homo = max(occupied, key=lambda orbital: orbital.energy_ev) if occupied else None
+    lumo = min(virtual, key=lambda orbital: orbital.energy_ev) if virtual else None
+    return homo, lumo
+
+
+def _orbital_summary_from_table(
+    orbital_table: OrbitalTable,
+) -> tuple[float | None, float | None, float | None]:
+    homo, lumo = _homo_lumo_orbitals(orbital_table.orbitals)
+    homo_ev = homo.energy_ev if homo else None
+    lumo_ev = lumo.energy_ev if lumo else None
+    gap_ev = lumo_ev - homo_ev if homo_ev is not None and lumo_ev is not None else None
+    return homo_ev, lumo_ev, gap_ev
 
 
 def _extract_orbital_summary(

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from qchem_workbench.analysis.quality_checks import run_quality_checks
 from qchem_workbench.backends.orca_parser import parse_orca_output
+from qchem_workbench.core.units import HARTREE_TO_EV
 
 
 def test_parse_orca_normal_completion_fixture(tmp_path):
@@ -185,6 +188,99 @@ def test_parse_orca_orbital_and_spin_fixture(tmp_path):
     assert result.lumo_ev == -1.2
     assert result.gap_ev == 4.8999999999999995
     assert result.metadata["s2_before_annihilation"] == 0.752
+
+
+def test_parse_orca_closed_shell_orbital_table(tmp_path):
+    output_path = tmp_path / "orbital-table.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP SP\n"
+        "ORBITAL ENERGIES\n"
+        " NO   OCC          E(Eh)          E(eV)\n"
+        "  0   2.0000      -0.5000      -13.6057\n"
+        "  1   2.0000      -0.3000       -8.1634\n"
+        "  2   0.0000       0.1000        2.7211\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+    table = result.properties.orbital_table
+
+    assert table is not None
+    assert len(table.orbitals) == 3
+    assert table.homo_index == 1
+    assert table.lumo_index == 2
+    assert table.orbitals[0].energy_hartree == -0.5
+    assert result.homo_ev == -8.1634
+    assert result.lumo_ev == 2.7211
+    assert result.gap_ev == pytest.approx(10.8845)
+
+
+def test_parse_orca_unrestricted_orbital_table(tmp_path):
+    output_path = tmp_path / "unrestricted-orbital-table.out"
+    output_path.write_text(
+        "! UKS def2-SVP SP\n"
+        "ALPHA ORBITALS\n"
+        " NO   OCC          E(Eh)          E(eV)\n"
+        "  0   1.0000      -0.5000      -13.6057\n"
+        "  1   0.0000       0.1000        2.7211\n"
+        "\n"
+        "BETA ORBITALS\n"
+        " NO   OCC          E(Eh)          E(eV)\n"
+        "  0   1.0000      -0.4500      -12.2451\n"
+        "  1   0.0000       0.0500        1.3606\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+    table = result.properties.orbital_table
+
+    assert table is not None
+    assert [orbital.spin_channel for orbital in table.orbitals] == [
+        "alpha",
+        "alpha",
+        "beta",
+        "beta",
+    ]
+    assert result.homo_ev == -12.2451
+    assert result.lumo_ev == 1.3606
+
+
+def test_parse_orca_partial_orbital_table_warns(tmp_path):
+    output_path = tmp_path / "partial-orbital-table.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP SP\n"
+        "ORBITAL ENERGIES\n"
+        " NO   OCC          E(Eh)\n"
+        "  0   2.0000      -0.5000\n"
+        "  1   2.0000      -0.3000\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+    table = result.properties.orbital_table
+
+    assert table is not None
+    assert table.lumo_index is None
+    assert result.homo_ev == pytest.approx(-0.3 * HARTREE_TO_EV)
+    assert result.lumo_ev is None
+    assert any("Incomplete ORCA orbital table" in warning for warning in result.warnings)
+
+
+def test_parse_orca_missing_orbital_table_is_not_failure(tmp_path):
+    output_path = tmp_path / "no-orbital-table.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP SP\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+
+    assert result.success is True
+    assert result.properties.orbital_table is None
 
 
 def test_parse_orca_incomplete_thermochemistry_fixture(tmp_path):
