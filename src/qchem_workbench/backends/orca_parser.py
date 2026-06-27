@@ -48,6 +48,9 @@ _ORCA_EXCITATION_RE = re.compile(
     rf"(?:\s+({_NUMBER})\s*nm)?(?:.*?\bf\s*=\s*({_NUMBER}))?",
     re.IGNORECASE | re.MULTILINE,
 )
+_TD_TRANSITION_RE = re.compile(
+    r"^\s*([A-Za-z0-9_.+\-]+\s*(?:->|<-)\s*[A-Za-z0-9_.+\-]+.*)$"
+)
 _HOMO_EV_RE = re.compile(
     rf"\bHOMO(?:\s+ENERGY)?\s*(?::|=)?\s*({_NUMBER})\s*eV\b",
     re.IGNORECASE,
@@ -187,7 +190,7 @@ def parse_orca_output(path: Path) -> CalculationResult:
 
     thermochemistry = _extract_thermochemistry(text, warnings)
     vibrational_modes = _extract_vibrational_modes(text, warnings)
-    excitations = _extract_excitations(text)
+    excitations = _extract_excitations(text, warnings)
     atom_count = _extract_atom_count(text)
     dipole_moment = _extract_dipole_moment(text, warnings)
     population_analyses = _extract_population_analyses(text, warnings, atom_count)
@@ -455,10 +458,21 @@ def _parse_float_tokens(tokens: list[str]) -> tuple[list[float], int]:
     return values, malformed
 
 
-def _extract_excitations(text: str) -> list[ElectronicExcitation]:
+def _extract_excitations(
+    text: str,
+    warnings: list[str],
+) -> list[ElectronicExcitation]:
     excitations: list[ElectronicExcitation] = []
-    for match in _ORCA_EXCITATION_RE.finditer(text):
-        state_index = match.group(1)
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not line.strip().lower().startswith("state"):
+            continue
+        match = _ORCA_EXCITATION_RE.match(line)
+        if not match:
+            warnings.append("Malformed ORCA excited-state line was ignored.")
+            continue
+
+        state_index = int(match.group(1))
         energy_ev = _parse_float(match.group(2))
         wavelength_nm = (
             _parse_float(match.group(3))
@@ -471,12 +485,30 @@ def _extract_excitations(text: str) -> list[ElectronicExcitation]:
         excitations.append(
             ElectronicExcitation(
                 energy_ev=energy_ev,
+                state_index=state_index,
                 wavelength_nm=wavelength_nm,
                 oscillator_strength=oscillator_strength,
+                transition_description=_extract_transition_description(
+                    lines[index + 1 :]
+                ),
                 state_label=f"STATE {state_index}",
             )
         )
     return excitations
+
+
+def _extract_transition_description(lines: list[str]) -> str | None:
+    transitions: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            break
+        if stripped.lower().startswith("state"):
+            break
+        match = _TD_TRANSITION_RE.match(line)
+        if match:
+            transitions.append(" ".join(match.group(1).split()))
+    return "; ".join(transitions) if transitions else None
 
 
 def _extract_atom_count(text: str) -> int | None:

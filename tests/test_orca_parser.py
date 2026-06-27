@@ -367,6 +367,7 @@ def test_parse_orca_excitation_fixture(tmp_path):
     excitation = result.properties.excitations[0]
 
     assert excitation.energy_ev == 3.5
+    assert excitation.state_index == 1
     assert excitation.wavelength_nm == 354.2406
     assert excitation.oscillator_strength == 0.045
     assert excitation.state_label == "STATE 1"
@@ -387,6 +388,56 @@ def test_parse_orca_excitation_missing_oscillator_strength(tmp_path):
     assert excitation.energy_ev == 2.0
     assert excitation.wavelength_nm == 619.9209921660013
     assert excitation.oscillator_strength is None
+
+
+def test_parse_orca_multiple_excited_states_and_transition(tmp_path):
+    output_path = tmp_path / "tddft-multiple.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP TDDFT\n"
+        "STATE 1: E=3.5000 eV 354.2406 nm f=0.0450\n"
+        "  20a -> 21a        0.7000\n"
+        "\n"
+        "STATE 2: E=4.0000 eV 309.9605 nm f=0.0100\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+    first, second = result.properties.excitations
+
+    assert first.state_index == 1
+    assert first.transition_description == "20a -> 21a 0.7000"
+    assert second.state_index == 2
+    assert second.energy_ev == 4.0
+
+
+def test_parse_orca_malformed_excited_state_warns(tmp_path):
+    output_path = tmp_path / "tddft-malformed.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP TDDFT\n"
+        "STATE bad line without energy\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+
+    assert result.properties.excitations == ()
+    assert any("Malformed ORCA excited-state line" in warning for warning in result.warnings)
+
+
+def test_parse_orca_without_excited_states_is_not_failure(tmp_path):
+    output_path = tmp_path / "no-tddft.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP SP\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+
+    assert result.success is True
+    assert result.properties.excitations == ()
 
 
 def test_parse_orca_dipole_moment(tmp_path):
