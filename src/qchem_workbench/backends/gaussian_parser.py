@@ -6,8 +6,11 @@ import re
 from pathlib import Path
 
 from qchem_workbench.core.properties import (
+    AtomicCharge,
     CalculationProperties,
+    DipoleMoment,
     ElectronicExcitation,
+    PopulationAnalysis,
     VibrationalMode,
     wavelength_nm_from_ev,
 )
@@ -33,6 +36,21 @@ _SPIN_VALUES_RE = re.compile(
     rf"({_NUMBER}),?\s+after\s+"
     rf"({_NUMBER})",
     re.IGNORECASE,
+)
+_ATOM_COUNT_RE = re.compile(r"\bNAtoms=\s*(\d+)")
+_DIPOLE_SECTION_RE = re.compile(
+    r"Dipole moment.*?Debye.*?\n"
+    rf"\s*X=\s*({_NUMBER})\s+Y=\s*({_NUMBER})\s+"
+    rf"Z=\s*({_NUMBER})\s+Tot=\s*({_NUMBER})",
+    re.IGNORECASE | re.DOTALL,
+)
+_CHARGE_SECTION_RE = re.compile(
+    r"^\s*(Mulliken|Lowdin|Löwdin|NPA|Natural Population Analysis)"
+    r"(?:\s+(?:atomic\s+)?)?charges\b",
+    re.IGNORECASE,
+)
+_CHARGE_ROW_RE = re.compile(
+    rf"^\s*(\d+)\s+([A-Z][a-z]?)(?:\s+\S+)?\s+({_NUMBER})\s*$"
 )
 _THERMOCHEMISTRY_PATTERNS = {
     "zero_point_correction_hartree": re.compile(
@@ -102,6 +120,14 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
     thermochemistry = _extract_thermochemistry(text, warnings)
     vibrational_modes = _extract_vibrational_modes(text, warnings)
     excitations = _extract_excitations(text)
+    atom_count = _extract_atom_count(text)
+    dipole_moment = _extract_dipole_moment(text, warnings)
+    population_analyses = _extract_population_analyses(text, warnings, atom_count)
+    atomic_charges = tuple(
+        charge
+        for analysis in population_analyses
+        for charge in analysis.atomic_charges
+    )
     frequencies = [
         float(mode.frequency_cm1)
         for mode in vibrational_modes
@@ -163,6 +189,9 @@ def parse_gaussian_output(path: Path) -> CalculationResult:
         properties=CalculationProperties(
             vibrational_modes=tuple(vibrational_modes),
             excitations=tuple(excitations),
+            dipole_moment=dipole_moment,
+            atomic_charges=atomic_charges,
+            population_analyses=tuple(population_analyses),
         ),
     )
 
@@ -333,6 +362,127 @@ def _extract_excitations(text: str) -> list[ElectronicExcitation]:
             )
         )
     return excitations
+
+
+def _extract_atom_count(text: str) -> int | None:
+    matches = _ATOM_COUNT_RE.findall(text)
+    return int(matches[-1]) if matches else None
+
+
+def _extract_dipole_moment(text: str, warnings: list[str]) -> DipoleMoment | None:
+    matches = list(_DIPOLE_SECTION_RE.finditer(text))
+    if not matches:
+        return None
+    if len(matches) > 1:
+        warnings.append("Multiple Gaussian dipole sections found; using the last.")
+
+    match = matches[-1]
+    return DipoleMoment(
+        x_debye=_parse_float(match.group(1)),
+        y_debye=_parse_float(match.group(2)),
+        z_debye=_parse_float(match.group(3)),
+        total_debye=_parse_float(match.group(4)),
+        source_backend="gaussian",
+        source_section_label="Dipole moment (Debye)",
+    )
+
+
+def _extract_population_analyses(
+    text: str,
+    warnings: list[str],
+    atom_count: int | None,
+) -> list[PopulationAnalysis]:
+    analyses_by_scheme: dict[str, PopulationAnalysis] = {}
+    lines = text.splitlines()
+
+    for index, line in enumerate(lines):
+        header = _CHARGE_SECTION_RE.match(line)
+        if not header:
+            continue
+
+        scheme = _normalise_charge_scheme(header.group(1))
+        charges, section_warnings = _parse_charge_rows(lines[index + 1 :], scheme)
+        warnings.extend(section_warnings)
+        if not charges:
+            warnings.append(
+                f"Gaussian {scheme} charge section contained no parseable rows."
+            )
+            continue
+
+        if atom_count is not None and len(charges) != atom_count:
+            warnings.append(
+                f"Gaussian {scheme} charge count {len(charges)} does not match "
+                f"NAtoms={atom_count}."
+            )
+        if scheme in analyses_by_scheme:
+            warnings.append(
+                f"Multiple Gaussian {scheme} charge sections found; using the last."
+            )
+        analyses_by_scheme[scheme] = PopulationAnalysis(
+            scheme=scheme,
+            atomic_charges=tuple(charges),
+            warnings=tuple(section_warnings),
+            source_backend="gaussian",
+            source_section_label=line.strip(),
+        )
+
+    return list(analyses_by_scheme.values())
+
+
+def _parse_charge_rows(
+    lines: list[str],
+    scheme: str,
+) -> tuple[list[AtomicCharge], list[str]]:
+    charges: list[AtomicCharge] = []
+    warnings: list[str] = []
+    malformed_rows = 0
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if charges:
+                break
+            continue
+        if _CHARGE_SECTION_RE.match(line):
+            break
+        if stripped.lower().startswith("sum of"):
+            break
+        if set(stripped) <= {"-", " "}:
+            continue
+        if stripped.lower().startswith(("atom", "center", "number")):
+            continue
+
+        match = _CHARGE_ROW_RE.match(line)
+        if match:
+            charges.append(
+                AtomicCharge(
+                    atom_index=int(match.group(1)),
+                    symbol=match.group(2),
+                    charge_e=_parse_float(match.group(3)),
+                    scheme=scheme,
+                )
+            )
+            continue
+
+        if charges:
+            malformed_rows += 1
+
+    if malformed_rows:
+        warnings.append(
+            f"Malformed Gaussian {scheme} charge row(s) were ignored."
+        )
+    return charges, warnings
+
+
+def _normalise_charge_scheme(raw_scheme: str) -> str:
+    lower = raw_scheme.lower()
+    if lower.startswith("lowdin") or lower.startswith("löwdin"):
+        return "Lowdin"
+    if lower.startswith("mulliken"):
+        return "Mulliken"
+    if lower.startswith("natural population"):
+        return "NPA"
+    return raw_scheme.upper()
 
 
 def _extract_spin_metadata(text: str, warnings: list[str]) -> dict[str, float]:

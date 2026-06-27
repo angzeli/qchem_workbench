@@ -306,6 +306,134 @@ def test_parse_gaussian_excitation_computes_missing_wavelength(tmp_path):
     assert result.properties.excitations[0].wavelength_nm == 619.9209921660013
 
 
+def test_parse_gaussian_dipole_moment(tmp_path):
+    output_path = tmp_path / "dipole.log"
+    output_path.write_text(
+        " # wb97xd/6-31g\n"
+        " Dipole moment (field-independent basis, Debye):\n"
+        "    X=     0.1000    Y=    -0.2000    Z=     1.5000  Tot=     1.5166\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    dipole = result.properties.dipole_moment
+
+    assert result.success is True
+    assert dipole is not None
+    assert dipole.x_debye == 0.1
+    assert dipole.y_debye == -0.2
+    assert dipole.z_debye == 1.5
+    assert dipole.total_debye == 1.5166
+    assert dipole.source_backend == "gaussian"
+
+
+def test_parse_gaussian_mulliken_charges(tmp_path):
+    output_path = tmp_path / "mulliken.log"
+    output_path.write_text(
+        " # wb97xd/6-31g pop=full\n"
+        " NAtoms=    3\n"
+        " Mulliken charges:\n"
+        "              1\n"
+        "     1  O   -0.8340\n"
+        "     2  H    0.4170\n"
+        "     3  H    0.4170\n"
+        " Sum of Mulliken charges =   0.00000\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    analyses = result.properties.population_analyses
+
+    assert len(analyses) == 1
+    assert analyses[0].scheme == "Mulliken"
+    assert len(analyses[0].atomic_charges) == 3
+    assert analyses[0].atomic_charges[0].symbol == "O"
+    assert analyses[0].atomic_charges[0].charge_e == -0.834
+    assert len(result.properties.atomic_charges) == 3
+
+
+def test_parse_gaussian_mulliken_and_lowdin_charges(tmp_path):
+    output_path = tmp_path / "charges.log"
+    output_path.write_text(
+        " # wb97xd/6-31g pop=full\n"
+        " NAtoms=    2\n"
+        " Mulliken charges:\n"
+        "     1  H    0.1000\n"
+        "     2  H   -0.1000\n"
+        " Sum of Mulliken charges =   0.00000\n"
+        " Lowdin charges:\n"
+        "     1  H    0.0500\n"
+        "     2  H   -0.0500\n"
+        " Sum of Lowdin charges =   0.00000\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+    analyses = {analysis.scheme: analysis for analysis in result.properties.population_analyses}
+
+    assert set(analyses) == {"Mulliken", "Lowdin"}
+    assert analyses["Lowdin"].atomic_charges[0].charge_e == 0.05
+
+
+def test_parse_gaussian_malformed_charge_table_warns(tmp_path):
+    output_path = tmp_path / "malformed-charges.log"
+    output_path.write_text(
+        " # wb97xd/6-31g pop=full\n"
+        " NAtoms=    2\n"
+        " Mulliken charges:\n"
+        "     1  H    0.1000\n"
+        "     malformed row\n"
+        "     2  H   -0.1000\n"
+        " Sum of Mulliken charges =   0.00000\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.success is True
+    assert len(result.properties.population_analyses[0].atomic_charges) == 2
+    assert any("Malformed Gaussian Mulliken charge row" in warning for warning in result.warnings)
+
+
+def test_parse_gaussian_missing_charge_analysis_is_not_failure(tmp_path):
+    output_path = tmp_path / "no-charges.log"
+    output_path.write_text(
+        " # wb97xd/6-31g\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.success is True
+    assert result.properties.population_analyses == ()
+    assert result.properties.atomic_charges == ()
+
+
+def test_parse_gaussian_duplicate_charge_scheme_uses_last(tmp_path):
+    output_path = tmp_path / "duplicate-charges.log"
+    output_path.write_text(
+        " # wb97xd/6-31g pop=full\n"
+        " Mulliken charges:\n"
+        "     1  H    0.1000\n"
+        " Sum of Mulliken charges =   0.10000\n"
+        " Mulliken charges:\n"
+        "     1  H    0.2000\n"
+        " Sum of Mulliken charges =   0.20000\n"
+        " Normal termination of Gaussian 16\n",
+        encoding="utf-8",
+    )
+
+    result = parse_gaussian_output(output_path)
+
+    assert result.properties.population_analyses[0].atomic_charges[0].charge_e == 0.2
+    assert any("Multiple Gaussian Mulliken charge sections" in warning for warning in result.warnings)
+
+
 def test_parse_unrestricted_spin_info(tmp_path):
     output_path = tmp_path / "unrestricted.log"
     output_path.write_text(
