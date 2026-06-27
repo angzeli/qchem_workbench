@@ -6,8 +6,11 @@ import re
 from pathlib import Path
 
 from qchem_workbench.core.properties import (
+    AtomicCharge,
     CalculationProperties,
+    DipoleMoment,
     ElectronicExcitation,
+    PopulationAnalysis,
     VibrationalMode,
     wavelength_nm_from_ev,
 )
@@ -57,6 +60,25 @@ _SPIN_AFTER_RE = re.compile(
 _S2_EXPECTATION_RE = re.compile(
     rf"(?:Expectation\s+value\s+of\s+)?<?S\*\*2>?\s*(?::|=)\s*({_NUMBER})",
     re.IGNORECASE,
+)
+_ATOM_COUNT_RE = re.compile(
+    r"Number\s+of\s+atoms\s*(?::|=)?\s*(\d+)", re.IGNORECASE
+)
+_DIPOLE_COMPONENT_RE = re.compile(
+    rf"Total\s+Dipole\s+Moment\s*\(Debye\)\s*(?::|=)\s*"
+    rf"({_NUMBER})\s+({_NUMBER})\s+({_NUMBER})",
+    re.IGNORECASE,
+)
+_DIPOLE_TOTAL_RE = re.compile(
+    rf"Magnitude\s*\(Debye\)\s*(?::|=)\s*({_NUMBER})", re.IGNORECASE
+)
+_CHARGE_SECTION_RE = re.compile(
+    r"^\s*(Mulliken|Lowdin|Loewdin|Löwdin|NPA)\s+"
+    r"(?:atomic\s+)?charges\b",
+    re.IGNORECASE,
+)
+_CHARGE_ROW_RE = re.compile(
+    rf"^\s*(\d+)\s+([A-Z][a-z]?)\s*:?\s+({_NUMBER})\s*$"
 )
 _THERMOCHEMISTRY_PATTERNS = {
     "zero_point_correction_hartree": re.compile(
@@ -151,6 +173,14 @@ def parse_orca_output(path: Path) -> CalculationResult:
     thermochemistry = _extract_thermochemistry(text, warnings)
     vibrational_modes = _extract_vibrational_modes(text, warnings)
     excitations = _extract_excitations(text)
+    atom_count = _extract_atom_count(text)
+    dipole_moment = _extract_dipole_moment(text, warnings)
+    population_analyses = _extract_population_analyses(text, warnings, atom_count)
+    atomic_charges = tuple(
+        charge
+        for analysis in population_analyses
+        for charge in analysis.atomic_charges
+    )
     frequencies = [
         float(mode.frequency_cm1)
         for mode in vibrational_modes
@@ -208,6 +238,9 @@ def parse_orca_output(path: Path) -> CalculationResult:
         properties=CalculationProperties(
             vibrational_modes=tuple(vibrational_modes),
             excitations=tuple(excitations),
+            dipole_moment=dipole_moment,
+            atomic_charges=atomic_charges,
+            population_analyses=tuple(population_analyses),
         ),
     )
 
@@ -384,6 +417,127 @@ def _extract_excitations(text: str) -> list[ElectronicExcitation]:
             )
         )
     return excitations
+
+
+def _extract_atom_count(text: str) -> int | None:
+    matches = _ATOM_COUNT_RE.findall(text)
+    return int(matches[-1]) if matches else None
+
+
+def _extract_dipole_moment(text: str, warnings: list[str]) -> DipoleMoment | None:
+    component_matches = list(_DIPOLE_COMPONENT_RE.finditer(text))
+    total_matches = list(_DIPOLE_TOTAL_RE.finditer(text))
+    if not component_matches and not total_matches:
+        return None
+    if len(component_matches) > 1 or len(total_matches) > 1:
+        warnings.append("Multiple ORCA dipole sections found; using the last values.")
+
+    component_match = component_matches[-1] if component_matches else None
+    return DipoleMoment(
+        x_debye=(
+            _parse_float(component_match.group(1)) if component_match else None
+        ),
+        y_debye=(
+            _parse_float(component_match.group(2)) if component_match else None
+        ),
+        z_debye=(
+            _parse_float(component_match.group(3)) if component_match else None
+        ),
+        total_debye=(
+            _parse_float(total_matches[-1].group(1)) if total_matches else None
+        ),
+        source_backend="orca",
+        source_section_label="Dipole moment (Debye)",
+    )
+
+
+def _extract_population_analyses(
+    text: str,
+    warnings: list[str],
+    atom_count: int | None,
+) -> list[PopulationAnalysis]:
+    analyses_by_scheme: dict[str, PopulationAnalysis] = {}
+    lines = text.splitlines()
+
+    for index, line in enumerate(lines):
+        header = _CHARGE_SECTION_RE.match(line)
+        if not header:
+            continue
+
+        scheme = _normalise_charge_scheme(header.group(1))
+        charges, section_warnings = _parse_charge_rows(lines[index + 1 :], scheme)
+        warnings.extend(section_warnings)
+        if not charges:
+            warnings.append(f"ORCA {scheme} charge section contained no parseable rows.")
+            continue
+        if atom_count is not None and len(charges) != atom_count:
+            warnings.append(
+                f"ORCA {scheme} charge count {len(charges)} does not match "
+                f"number of atoms {atom_count}."
+            )
+        if scheme in analyses_by_scheme:
+            warnings.append(
+                f"Multiple ORCA {scheme} charge sections found; using the last."
+            )
+        analyses_by_scheme[scheme] = PopulationAnalysis(
+            scheme=scheme,
+            atomic_charges=tuple(charges),
+            warnings=tuple(section_warnings),
+            source_backend="orca",
+            source_section_label=line.strip(),
+        )
+
+    return list(analyses_by_scheme.values())
+
+
+def _parse_charge_rows(
+    lines: list[str],
+    scheme: str,
+) -> tuple[list[AtomicCharge], list[str]]:
+    charges: list[AtomicCharge] = []
+    warnings: list[str] = []
+    malformed_rows = 0
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if charges:
+                break
+            continue
+        if _CHARGE_SECTION_RE.match(line):
+            break
+        if set(stripped) <= {"-", " "}:
+            continue
+        if stripped.lower().startswith(("atom", "index", "number")):
+            continue
+
+        match = _CHARGE_ROW_RE.match(line)
+        if match:
+            charges.append(
+                AtomicCharge(
+                    atom_index=int(match.group(1)),
+                    symbol=match.group(2),
+                    charge_e=_parse_float(match.group(3)),
+                    scheme=scheme,
+                )
+            )
+            continue
+
+        if charges:
+            malformed_rows += 1
+
+    if malformed_rows:
+        warnings.append(f"Malformed ORCA {scheme} charge row(s) were ignored.")
+    return charges, warnings
+
+
+def _normalise_charge_scheme(raw_scheme: str) -> str:
+    lower = raw_scheme.lower()
+    if lower.startswith(("lowdin", "loewdin", "löwdin")):
+        return "Lowdin"
+    if lower.startswith("mulliken"):
+        return "Mulliken"
+    return raw_scheme.upper()
 
 
 def _extract_orbital_summary(

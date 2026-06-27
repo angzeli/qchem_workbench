@@ -269,3 +269,107 @@ def test_parse_orca_excitation_missing_oscillator_strength(tmp_path):
     assert excitation.energy_ev == 2.0
     assert excitation.wavelength_nm == 619.9209921660013
     assert excitation.oscillator_strength is None
+
+
+def test_parse_orca_dipole_moment(tmp_path):
+    output_path = tmp_path / "dipole.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP SP\n"
+        "Total Dipole Moment (Debye) :    0.1000   -0.2000    1.5000\n"
+        "Magnitude (Debye)          :    1.5166\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+    dipole = result.properties.dipole_moment
+
+    assert result.success is True
+    assert dipole is not None
+    assert dipole.x_debye == 0.1
+    assert dipole.y_debye == -0.2
+    assert dipole.z_debye == 1.5
+    assert dipole.total_debye == 1.5166
+    assert dipole.source_backend == "orca"
+
+
+def test_parse_orca_mulliken_charges(tmp_path):
+    output_path = tmp_path / "mulliken.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP SP\n"
+        "Number of atoms     3\n"
+        "MULLIKEN ATOMIC CHARGES\n"
+        "  0 O : -0.8340\n"
+        "  1 H :  0.4170\n"
+        "  2 H :  0.4170\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+    analyses = result.properties.population_analyses
+
+    assert len(analyses) == 1
+    assert analyses[0].scheme == "Mulliken"
+    assert len(analyses[0].atomic_charges) == 3
+    assert analyses[0].atomic_charges[0].symbol == "O"
+    assert analyses[0].atomic_charges[0].charge_e == -0.834
+    assert len(result.properties.atomic_charges) == 3
+
+
+def test_parse_orca_mulliken_and_lowdin_charges(tmp_path):
+    output_path = tmp_path / "charges.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP SP\n"
+        "Number of atoms     2\n"
+        "MULLIKEN ATOMIC CHARGES\n"
+        "  0 H :  0.1000\n"
+        "  1 H : -0.1000\n"
+        "\n"
+        "LOEWDIN ATOMIC CHARGES\n"
+        "  0 H :  0.0500\n"
+        "  1 H : -0.0500\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+    analyses = {analysis.scheme: analysis for analysis in result.properties.population_analyses}
+
+    assert set(analyses) == {"Mulliken", "Lowdin"}
+    assert analyses["Lowdin"].atomic_charges[0].charge_e == 0.05
+
+
+def test_parse_orca_missing_population_analysis_is_not_failure(tmp_path):
+    output_path = tmp_path / "no-charges.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP SP\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+
+    assert result.success is True
+    assert result.properties.population_analyses == ()
+    assert result.properties.atomic_charges == ()
+
+
+def test_parse_orca_malformed_charge_table_warns(tmp_path):
+    output_path = tmp_path / "malformed-charges.out"
+    output_path.write_text(
+        "! B3LYP def2-SVP SP\n"
+        "Number of atoms     2\n"
+        "MULLIKEN ATOMIC CHARGES\n"
+        "  0 H :  0.1000\n"
+        "  malformed row\n"
+        "  1 H : -0.1000\n"
+        "****ORCA TERMINATED NORMALLY****\n",
+        encoding="utf-8",
+    )
+
+    result = parse_orca_output(output_path)
+
+    assert result.success is True
+    assert len(result.properties.population_analyses[0].atomic_charges) == 2
+    assert any("Malformed ORCA Mulliken charge row" in warning for warning in result.warnings)
