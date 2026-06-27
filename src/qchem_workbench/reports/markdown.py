@@ -56,6 +56,10 @@ def generate_markdown_report(
     if adsorption_row_list:
         sections.append(_adsorption_system_summary(adsorption_row_list, result_list))
         sections.append(_adsorption_energy_table(adsorption_row_list))
+    if _has_dipole_data(result_list):
+        sections.append(_dipole_moment_summary(result_list))
+    if _has_population_analysis_data(result_list):
+        sections.append(_population_analysis_summary(result_list))
     if _has_vibrational_data(result_list):
         sections.append(_vibrational_summary(result_list))
     if _has_imaginary_frequencies(result_list):
@@ -299,6 +303,14 @@ def _has_vibrational_data(results: list[CalculationResult]) -> bool:
     )
 
 
+def _has_dipole_data(results: list[CalculationResult]) -> bool:
+    return any(result.properties.dipole_moment is not None for result in results)
+
+
+def _has_population_analysis_data(results: list[CalculationResult]) -> bool:
+    return any(result.properties.population_analyses for result in results)
+
+
 def _has_imaginary_frequencies(results: list[CalculationResult]) -> bool:
     return any(
         _is_imaginary_mode(mode)
@@ -316,7 +328,79 @@ def _has_orbital_data(results: list[CalculationResult]) -> bool:
         result.homo_ev is not None
         or result.lumo_ev is not None
         or result.gap_ev is not None
+        or result.properties.orbital_table is not None
         for result in results
+    )
+
+
+def _dipole_moment_summary(results: list[CalculationResult]) -> str:
+    rows = []
+    for result in results:
+        dipole = result.properties.dipole_moment
+        if dipole is None:
+            continue
+        rows.append(
+            (
+                result.species_name,
+                dipole.source_backend or result.backend,
+                dipole.source_section_label,
+                _format_number(dipole.x_debye),
+                _format_number(dipole.y_debye),
+                _format_number(dipole.z_debye),
+                _format_number(dipole.total_debye),
+                _result_source(result),
+            )
+        )
+    return "## Dipole moment summary\n\n" + _markdown_table(
+        [
+            "Species",
+            "Backend",
+            "Source section",
+            "X (Debye)",
+            "Y (Debye)",
+            "Z (Debye)",
+            "Total (Debye)",
+            "Source path",
+        ],
+        rows,
+    )
+
+
+def _population_analysis_summary(results: list[CalculationResult]) -> str:
+    rows = []
+    for result in results:
+        for analysis in result.properties.population_analyses:
+            charges = [
+                charge.charge_e
+                for charge in analysis.atomic_charges
+                if charge.charge_e is not None
+            ]
+            rows.append(
+                (
+                    result.species_name,
+                    analysis.source_backend or result.backend,
+                    analysis.scheme,
+                    len(analysis.atomic_charges),
+                    _format_number(min(charges) if charges else None),
+                    _format_number(max(charges) if charges else None),
+                    analysis.source_section_label,
+                    "; ".join(analysis.warnings),
+                    _result_source(result),
+                )
+            )
+    return "## Population analysis summary\n\n" + _markdown_table(
+        [
+            "Species",
+            "Backend",
+            "Charge scheme",
+            "Atoms with charges",
+            "Min charge (e)",
+            "Max charge (e)",
+            "Source section",
+            "Warnings",
+            "Source path",
+        ],
+        rows,
     )
 
 
@@ -344,6 +428,12 @@ def _vibrational_summary(results: list[CalculationResult]) -> str:
                     for mode in modes
                     if mode.raman_activity_angstrom4_amu is not None
                 ),
+                sum(1 for mode in modes if mode.reduced_mass_amu is not None),
+                sum(
+                    1
+                    for mode in modes
+                    if mode.force_constant_mdyne_angstrom is not None
+                ),
             )
         )
     return "## Vibrational summary\n\n" + _markdown_table(
@@ -355,6 +445,8 @@ def _vibrational_summary(results: list[CalculationResult]) -> str:
             "Imaginary modes",
             "Modes with IR intensity (km/mol)",
             "Modes with Raman activity (angstrom^4/amu)",
+            "Modes with reduced mass (amu)",
+            "Modes with force constant (mDyne/angstrom)",
         ],
         rows,
     )
@@ -391,6 +483,11 @@ def _excitation_summary(results: list[CalculationResult]) -> str:
             _format_number(excitation.energy_ev),
             _format_number(excitation.wavelength_nm),
             _format_number(excitation.oscillator_strength),
+            excitation.state_index,
+            excitation.spin_multiplicity_label,
+            excitation.transition_description,
+            "; ".join(excitation.warnings),
+            _result_source(result),
         )
         for result in results
         for excitation in result.properties.excitations
@@ -402,6 +499,11 @@ def _excitation_summary(results: list[CalculationResult]) -> str:
             "Excitation energy (eV)",
             "Wavelength (nm)",
             "Oscillator strength",
+            "State index",
+            "Spin/multiplicity label",
+            "Transition description",
+            "Warnings",
+            "Source path",
         ],
         rows,
     )
@@ -414,18 +516,62 @@ def _orbital_summary(results: list[CalculationResult]) -> str:
             _format_number(result.homo_ev),
             _format_number(result.lumo_ev),
             _format_number(result.gap_ev),
+            _orbital_count(result),
+            _orbital_source_backend(result),
+            _orbital_source_section(result),
+            _orbital_warnings(result),
+            _result_source(result),
         )
         for result in results
         if (
             result.homo_ev is not None
             or result.lumo_ev is not None
             or result.gap_ev is not None
+            or result.properties.orbital_table is not None
         )
     ]
     return "## Orbital summary\n\n" + _markdown_table(
-        ["Species", "HOMO (eV)", "LUMO (eV)", "Gap (eV)"],
+        [
+            "Species",
+            "HOMO (eV)",
+            "LUMO (eV)",
+            "Gap (eV)",
+            "Orbitals",
+            "Backend",
+            "Source section",
+            "Warnings",
+            "Source path",
+        ],
         rows,
     )
+
+
+def _orbital_count(result: CalculationResult) -> int | str:
+    table = result.properties.orbital_table
+    return len(table.orbitals) if table is not None else MISSING
+
+
+def _orbital_source_backend(result: CalculationResult) -> str:
+    table = result.properties.orbital_table
+    return table.backend if table is not None and table.backend else result.backend
+
+
+def _orbital_source_section(result: CalculationResult) -> str:
+    table = result.properties.orbital_table
+    if table is None or table.source_section_label is None:
+        return MISSING
+    return table.source_section_label
+
+
+def _orbital_warnings(result: CalculationResult) -> str:
+    table = result.properties.orbital_table
+    if table is None:
+        return MISSING
+    return "; ".join(table.warnings) if table.warnings else MISSING
+
+
+def _result_source(result: CalculationResult) -> str:
+    return str(result.source_path) if result.source_path is not None else MISSING
 
 
 def _property_plot_links(results: list[CalculationResult]) -> str:

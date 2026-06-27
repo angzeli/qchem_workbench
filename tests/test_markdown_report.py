@@ -4,8 +4,13 @@ from qchem_workbench.analysis.adsorption import AdsorptionEnergyRow
 from qchem_workbench.analysis.quality_checks import QualityCheck
 from qchem_workbench.analysis.reactions import ReactionEnergyRow
 from qchem_workbench.core.properties import (
+    AtomicCharge,
     CalculationProperties,
+    DipoleMoment,
     ElectronicExcitation,
+    MolecularOrbital,
+    OrbitalTable,
+    PopulationAnalysis,
     VibrationalMode,
 )
 from qchem_workbench.core.result import CalculationResult
@@ -374,6 +379,62 @@ def test_markdown_report_includes_vibrational_property_sections():
     assert "| water | 2 | -50 | 1600 | 1 | 2 | 1 |" in report
 
 
+def test_markdown_report_includes_dipole_and_charge_sections(tmp_path):
+    results = [
+        CalculationResult(
+            species_name="water",
+            backend="gaussian",
+            method="wb97xd",
+            basis="6-31g",
+            task="pop",
+            success=True,
+            source_path=tmp_path / "water.log",
+            properties=CalculationProperties(
+                dipole_moment=DipoleMoment(
+                    x_debye=0.1,
+                    y_debye=-0.2,
+                    z_debye=1.5,
+                    total_debye=1.5166,
+                    source_backend="gaussian",
+                    source_section_label="Dipole moment (Debye)",
+                ),
+                population_analyses=(
+                    PopulationAnalysis(
+                        scheme="Mulliken",
+                        atomic_charges=(
+                            AtomicCharge(
+                                atom_index=1,
+                                symbol="O",
+                                charge_e=-0.834,
+                                scheme="Mulliken",
+                            ),
+                            AtomicCharge(
+                                atom_index=2,
+                                symbol="H",
+                                charge_e=0.417,
+                                scheme="Mulliken",
+                            ),
+                        ),
+                        warnings=("charge count checked",),
+                        source_backend="gaussian",
+                        source_section_label="Mulliken charges",
+                    ),
+                ),
+            ),
+        )
+    ]
+
+    report = generate_markdown_report(results)
+
+    assert "## Dipole moment summary" in report
+    assert "Total (Debye)" in report
+    assert "| water | gaussian | Dipole moment (Debye) | 0.1 | -0.2 | 1.5 | 1.5166 |" in report
+    assert "## Population analysis summary" in report
+    assert "Charge scheme" in report
+    assert "Min charge (e)" in report
+    assert "charge count checked" in report
+
+
 def test_markdown_report_includes_excitation_orbital_and_plot_sections():
     results = [
         CalculationResult(
@@ -393,6 +454,8 @@ def test_markdown_report_includes_excitation_orbital_and_plot_sections():
                         energy_ev=4.0,
                         wavelength_nm=309.960496,
                         oscillator_strength=0.123,
+                        state_index=1,
+                        transition_description="20 -> 21 0.7",
                         state_label="Singlet-A",
                     ),
                 )
@@ -406,10 +469,48 @@ def test_markdown_report_includes_excitation_orbital_and_plot_sections():
     assert "Excitation energy (eV)" in report
     assert "Wavelength (nm)" in report
     assert "| water | Singlet-A | 4 | 309.960496 | 0.123 |" in report
+    assert "Transition description" in report
+    assert "20 -> 21 0.7" in report
     assert "## Orbital summary" in report
     assert "| water | -6.1 | -1.2 | 4.9 |" in report
     assert "## Property plot links" in report
     assert "| water | ir | reports/water_ir.png |" in report
+
+
+def test_markdown_report_includes_orbital_table_provenance():
+    results = [
+        CalculationResult(
+            species_name="water",
+            backend="orca",
+            method="b3lyp",
+            basis="def2-svp",
+            task="single_point",
+            success=True,
+            homo_ev=-8.0,
+            lumo_ev=2.0,
+            gap_ev=10.0,
+            properties=CalculationProperties(
+                orbital_table=OrbitalTable(
+                    backend="orca",
+                    orbitals=(
+                        MolecularOrbital(index=1, energy_ev=-8.0, occupation=2.0),
+                        MolecularOrbital(index=2, energy_ev=2.0, occupation=0.0),
+                    ),
+                    homo_index=1,
+                    lumo_index=2,
+                    warnings=("synthetic partial table",),
+                    source_section_label="Orbital energies",
+                )
+            ),
+        )
+    ]
+
+    report = generate_markdown_report(results)
+
+    assert "## Orbital summary" in report
+    assert "Orbitals" in report
+    assert "Orbital energies" in report
+    assert "synthetic partial table" in report
 
 
 def test_markdown_report_without_properties_remains_clean():
@@ -428,6 +529,8 @@ def test_markdown_report_without_properties_remains_clean():
 
     assert "## Vibrational summary" not in report
     assert "## Imaginary-frequency summary" not in report
+    assert "## Dipole moment summary" not in report
+    assert "## Population analysis summary" not in report
     assert "## Excitation summary" not in report
     assert "## Orbital summary" not in report
     assert "## Property plot links" not in report
