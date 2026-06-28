@@ -97,6 +97,12 @@ from qchem_workbench.microkinetics.sensitivity import (
     microkinetic_sensitivity,
     write_sensitivity_csv,
 )
+from qchem_workbench.microkinetics.uncertainty import (
+    load_parameter_distributions,
+    microkinetic_uncertainty_sample,
+    parameter_distributions_from_mapping,
+    write_uncertainty_csv,
+)
 from qchem_workbench.microkinetics.simulation import (
     SciPyUnavailableError,
     load_microkinetic_conditions,
@@ -524,6 +530,18 @@ def build_parser() -> argparse.ArgumentParser:
     microkinetics_sensitivity_parser.set_defaults(
         func=_microkinetics_sensitivity_command
     )
+    microkinetics_sample_parser = microkinetics_subparsers.add_parser(
+        "sample",
+        help="sample user-provided kinetic parameter distributions",
+    )
+    microkinetics_sample_parser.add_argument("model", type=Path)
+    microkinetics_sample_parser.add_argument("--conditions", required=True, type=Path)
+    microkinetics_sample_parser.add_argument("--n", required=True, type=int)
+    microkinetics_sample_parser.add_argument("--seed", type=int)
+    microkinetics_sample_parser.add_argument("--observable")
+    microkinetics_sample_parser.add_argument("--site-count", type=float)
+    microkinetics_sample_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_sample_parser.set_defaults(func=_microkinetics_sample_command)
 
     run_project_parser = subparsers.add_parser(
         "run-project", help="run explicitly configured project manifest steps"
@@ -1283,10 +1301,55 @@ def _microkinetics_sensitivity_command(args: argparse.Namespace) -> int:
     return 0 if all(row.baseline_converged for row in rows) else 1
 
 
+def _microkinetics_sample_command(args: argparse.Namespace) -> int:
+    try:
+        model = load_microkinetic_model(args.model)
+        conditions = load_microkinetic_conditions(args.conditions)
+        observable = args.observable or conditions.observable
+        if observable is None:
+            raise ValueError(
+                "an observable is required; pass --observable or set conditions.observable"
+            )
+        distributions = _load_microkinetic_parameter_distributions(conditions)
+        result = microkinetic_uncertainty_sample(
+            model,
+            distributions,
+            conditions.initial_coverages,
+            conditions.variables,
+            observable=observable,
+            n_samples=args.n,
+            seed=args.seed,
+            temperature_K=conditions.temperature_K,
+            active_site_count=args.site_count,
+        )
+        write_uncertainty_csv(result, args.out)
+    except (OSError, ValueError, KeyError, SciPyUnavailableError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    summary = result.summary
+    print("observable\tsuccess_count\tfailure_count\tmean\tq05\tq95")
+    mean = "" if summary.mean is None else f"{summary.mean:.12g}"
+    q05 = "" if summary.q05 is None else f"{summary.q05:.12g}"
+    q95 = "" if summary.q95 is None else f"{summary.q95:.12g}"
+    print(
+        f"{summary.observable}\t{summary.success_count}\t"
+        f"{summary.failure_count}\t{mean}\t{q05}\t{q95}"
+    )
+    print(f"Wrote microkinetic uncertainty summary to {args.out}.")
+    return 0 if summary.failure_count == 0 else 1
+
+
 def _load_microkinetic_rate_parameters(conditions):
     if conditions.rate_parameters_path is not None:
         return load_rate_parameter_set(conditions.rate_parameters_path)
     return rate_parameter_set_from_mapping(conditions.rate_parameters)
+
+
+def _load_microkinetic_parameter_distributions(conditions):
+    if conditions.parameter_distributions_path is not None:
+        return load_parameter_distributions(conditions.parameter_distributions_path)
+    return parameter_distributions_from_mapping(conditions.parameter_distributions)
 
 
 def _load_microkinetic_state_csv(path: Path) -> dict[str, float]:

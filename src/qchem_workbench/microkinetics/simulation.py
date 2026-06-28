@@ -30,6 +30,9 @@ class MicrokineticConditions:
     time_grid: tuple[float, ...] = ()
     rate_parameters_path: Path | None = None
     rate_parameters: dict[str, Any] | None = None
+    parameter_distributions_path: Path | None = None
+    parameter_distributions: dict[str, Any] | None = None
+    observable: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -96,6 +99,19 @@ def load_microkinetic_conditions(path: Path) -> MicrokineticConditions:
         if not isinstance(rate_parameters_path, str) or not rate_parameters_path.strip():
             raise ValueError(f"{conditions_path}: rate_parameters_path must be a string")
         resolved_rate_parameters_path = (conditions_path.parent / rate_parameters_path).resolve()
+    parameter_distributions_path = raw_conditions.get("parameter_distributions_path")
+    resolved_parameter_distributions_path = None
+    if parameter_distributions_path is not None:
+        if (
+            not isinstance(parameter_distributions_path, str)
+            or not parameter_distributions_path.strip()
+        ):
+            raise ValueError(
+                f"{conditions_path}: parameter_distributions_path must be a string"
+            )
+        resolved_parameter_distributions_path = (
+            conditions_path.parent / parameter_distributions_path
+        ).resolve()
 
     return MicrokineticConditions(
         temperature_K=_optional_positive_number(raw_conditions.get("temperature_K")),
@@ -110,6 +126,11 @@ def load_microkinetic_conditions(path: Path) -> MicrokineticConditions:
         rate_parameters=raw_conditions.get("rate_parameters")
         if isinstance(raw_conditions.get("rate_parameters"), dict)
         else data.get("rate_parameters"),
+        parameter_distributions_path=resolved_parameter_distributions_path,
+        parameter_distributions=raw_conditions.get("parameter_distributions")
+        if isinstance(raw_conditions.get("parameter_distributions"), dict)
+        else data.get("parameter_distributions"),
+        observable=_optional_str(raw_conditions.get("observable")),
         metadata=dict(raw_conditions.get("metadata", {}))
         if isinstance(raw_conditions.get("metadata", {}), dict)
         else {},
@@ -366,3 +387,12 @@ def _optional_positive_number(value: Any) -> float | None:
     if not isinstance(value, (int, float)) or value <= 0:
         raise ValueError("temperature_K must be positive")
     return float(value)
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return str(value)
+    stripped = value.strip()
+    return stripped or None
