@@ -85,11 +85,18 @@ from qchem_workbench.analysis.screening import (
     write_descriptor_table_csv,
     write_ranked_candidates_csv,
 )
+from qchem_workbench.analysis.surfaces import (
+    AdsorptionSite,
+    CoverageSpec,
+    SurfaceModel,
+    validate_adsorption_sites,
+)
 
 __all__ = [
     "ADSORPTION_SCHEMA_VERSION",
     "AdsorptionCalculationRef",
     "AdsorptionEnergyRow",
+    "AdsorptionSite",
     "AdsorptionSystem",
     "AdsorptionWorkflow",
     "AmbiguousSpeciesMatch",
@@ -111,6 +118,7 @@ __all__ = [
     "CorrectionAttachment",
     "CorrectionTableRow",
     "CorrectionTerm",
+    "CoverageSpec",
     "ConvergenceRow",
     "ConvergenceStudy",
     "ConvergenceTolerance",
@@ -126,6 +134,7 @@ __all__ = [
     "ReactionEnergyRow",
     "ResultMatchReport",
     "SpeciesResultMatch",
+    "SurfaceModel",
     "SUPPORTED_POTENTIAL_REFERENCES",
     "adsorption_electronic_energy_table",
     "adsorption_gibbs_free_energy_table",
@@ -151,6 +160,7 @@ __all__ = [
     "run_quality_checks",
     "select_lowest_energy_conformers",
     "validate_proposed_candidates",
+    "validate_adsorption_sites",
     "write_descriptor_table_csv",
     "write_handoff_table_csv",
     "write_proposed_candidates_csv",
