@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 from qchem_workbench.core.result import CalculationResult
-from qchem_workbench.core.units import HARTREE_TO_EV
+from qchem_workbench.core.units import HARTREE_TO_EV, ry_per_bohr_to_ev_per_angstrom
 
 
 RYDBERG_TO_HARTREE = 0.5
@@ -19,6 +19,25 @@ _NAT_RE = re.compile(r"number\s+of\s+atoms/cell\s*=\s*(\d+)", re.IGNORECASE)
 _MAX_FORCE_RE = re.compile(
     rf"(?:maximum|max)\s+force\s*=\s*({_NUMBER})\s*([A-Za-z/]+)?",
     re.IGNORECASE,
+)
+_TOTAL_FORCE_RE = re.compile(
+    rf"total\s+force\s*=\s*({_NUMBER})\s*([A-Za-z/]+)?",
+    re.IGNORECASE,
+)
+_ATOMIC_FORCE_ROW_RE = re.compile(
+    rf"^\s*atom\s+(\d+)\s+type\s+\d+\s+force\s+=\s+"
+    rf"({_NUMBER})\s+({_NUMBER})\s+({_NUMBER})",
+    re.IGNORECASE,
+)
+_FORCE_LIKE_ROW_RE = re.compile(r"^\s*atom\s+\S+.*\bforce\s*=", re.IGNORECASE)
+_STRESS_START_RE = re.compile(
+    r"total\s+stress\s+\(([^)]+)\)",
+    re.IGNORECASE,
+)
+_PRESSURE_RE = re.compile(rf"\bP\s*=\s*({_NUMBER})")
+_MAGNETISATION_RE = re.compile(
+    rf"^\s*(total|absolute)\s+magneti[sz]ation\s*=\s*({_NUMBER})\s*(.*)$",
+    re.IGNORECASE | re.MULTILINE,
 )
 _CELL_START_RE = re.compile(r"^\s*CELL_PARAMETERS\b", re.IGNORECASE)
 _ATOMIC_POSITIONS_START_RE = re.compile(r"^\s*ATOMIC_POSITIONS\b", re.IGNORECASE)
@@ -85,6 +104,15 @@ def parse_qe_output(path: Path) -> CalculationResult:
     max_force = _maximum_force(text)
     if max_force is not None:
         metadata.update(max_force)
+    force_metadata = _force_metadata(text, warnings)
+    if force_metadata:
+        metadata.update(force_metadata)
+    stress = _stress_tensor(text, warnings)
+    if stress is not None:
+        metadata["stress"] = stress
+    magnetisation = _magnetisation(text)
+    if magnetisation:
+        metadata["magnetisation"] = magnetisation
     relaxation = _relaxation_trajectory(text, warnings, energies)
     if relaxation is not None:
         metadata["relaxation_trajectory"] = relaxation
@@ -197,6 +225,135 @@ def _maximum_force_values(text: str) -> list[dict[str, float | str]]:
                 "max_force_unit": match.group(2) or "",
             }
         )
+    return values
+
+
+def _force_metadata(text: str, warnings: list[str]) -> dict[str, object]:
+    metadata: dict[str, object] = {}
+    atomic_forces, malformed_force_rows = _atomic_forces(text)
+    if malformed_force_rows:
+        warnings.append("Malformed QE atomic force row(s) were ignored.")
+    if atomic_forces:
+        metadata["atomic_forces"] = {
+            "unit": "Ry/bohr",
+            "converted_unit": "eV/angstrom",
+            "forces": atomic_forces,
+        }
+        max_force = max(
+            float(force["magnitude_ry_bohr"]) for force in atomic_forces
+        )
+        metadata["max_force_from_atomic_forces_ry_bohr"] = max_force
+        metadata["max_force_from_atomic_forces_ev_angstrom"] = (
+            ry_per_bohr_to_ev_per_angstrom(max_force)
+        )
+
+    total_force = _total_force(text)
+    if total_force is not None:
+        metadata["total_force"] = total_force
+    return metadata
+
+
+def _atomic_forces(text: str) -> tuple[list[dict[str, float | int]], int]:
+    forces: list[dict[str, float | int]] = []
+    malformed_rows = 0
+    for line in text.splitlines():
+        match = _ATOMIC_FORCE_ROW_RE.match(line)
+        if match:
+            fx = _parse_float(match.group(2))
+            fy = _parse_float(match.group(3))
+            fz = _parse_float(match.group(4))
+            magnitude = (fx * fx + fy * fy + fz * fz) ** 0.5
+            forces.append(
+                {
+                    "atom_index": int(match.group(1)),
+                    "fx_ry_bohr": fx,
+                    "fy_ry_bohr": fy,
+                    "fz_ry_bohr": fz,
+                    "magnitude_ry_bohr": magnitude,
+                    "fx_ev_angstrom": ry_per_bohr_to_ev_per_angstrom(fx),
+                    "fy_ev_angstrom": ry_per_bohr_to_ev_per_angstrom(fy),
+                    "fz_ev_angstrom": ry_per_bohr_to_ev_per_angstrom(fz),
+                    "magnitude_ev_angstrom": ry_per_bohr_to_ev_per_angstrom(
+                        magnitude
+                    ),
+                }
+            )
+            continue
+        if _FORCE_LIKE_ROW_RE.match(line):
+            malformed_rows += 1
+    return forces, malformed_rows
+
+
+def _total_force(text: str) -> dict[str, float | str] | None:
+    matches = list(_TOTAL_FORCE_RE.finditer(text))
+    if not matches:
+        return None
+    match = matches[-1]
+    value = _parse_float(match.group(1))
+    unit = match.group(2) or ""
+    return {
+        "value": value,
+        "unit": unit,
+        "value_ev_angstrom": (
+            ry_per_bohr_to_ev_per_angstrom(value)
+            if unit.lower() in {"ry/bohr", "ry/bohrs"}
+            else None
+        ),
+    }
+
+
+def _stress_tensor(text: str, warnings: list[str]) -> dict[str, object] | None:
+    lines = text.splitlines()
+    stress_blocks: list[dict[str, object]] = []
+    for index, line in enumerate(lines):
+        match = _STRESS_START_RE.search(line)
+        if not match:
+            continue
+        tensor: list[list[float]] = []
+        for offset in range(1, 4):
+            try:
+                values = [
+                    _parse_float(value)
+                    for value in lines[index + offset].split()[:3]
+                ]
+            except (IndexError, ValueError):
+                warnings.append("Malformed QE stress tensor block was ignored.")
+                break
+            if len(values) != 3:
+                warnings.append("Malformed QE stress tensor block was ignored.")
+                break
+            tensor.append(values)
+        if len(tensor) == 3:
+            stress_blocks.append(
+                {
+                    "tensor": tensor,
+                    "unit": match.group(1).strip(),
+                    "pressure": _pressure_from_line(line),
+                    "pressure_unit": (
+                        "kbar" if _pressure_from_line(line) is not None else None
+                    ),
+                }
+            )
+    return stress_blocks[-1] if stress_blocks else None
+
+
+def _pressure_from_line(line: str) -> float | None:
+    match = _PRESSURE_RE.search(line)
+    return _parse_float(match.group(1)) if match else None
+
+
+def _magnetisation(text: str) -> dict[str, object]:
+    values: dict[str, object] = {}
+    for match in _MAGNETISATION_RE.finditer(text):
+        key = (
+            "total_magnetisation"
+            if match.group(1).lower() == "total"
+            else "absolute_magnetisation"
+        )
+        values[key] = _parse_float(match.group(2))
+        unit = match.group(3).strip()
+        if unit:
+            values[f"{key}_unit"] = unit
     return values
 
 
