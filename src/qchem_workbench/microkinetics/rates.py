@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Mapping
 
 from qchem_workbench.microkinetics.parameters import RateParameterSet
@@ -25,6 +27,79 @@ class StepRate:
             "net_rate": self.net_rate,
             "unit": self.unit,
         }
+
+
+@dataclass(frozen=True)
+class SpeciesProductionRate:
+    species_id: str
+    phase: str
+    net_rate: float
+    unit: str | None = None
+
+    def to_dict(self) -> dict[str, float | str | None]:
+        return {
+            "species_id": self.species_id,
+            "phase": self.phase,
+            "net_rate": self.net_rate,
+            "unit": self.unit,
+        }
+
+
+@dataclass(frozen=True)
+class MicrokineticRateAnalysis:
+    step_rates: tuple[StepRate, ...]
+    species_rates: tuple[SpeciesProductionRate, ...]
+    tof_species: str | None = None
+    turnover_frequency: float | None = None
+    turnover_frequency_unit: str | None = None
+    active_site_count: float | None = None
+    warnings: tuple[str, ...] = ()
+
+    def to_rows(self) -> list[dict[str, str | float | None]]:
+        rows: list[dict[str, str | float | None]] = []
+        for row in self.step_rates:
+            rows.append(
+                {
+                    "row_type": "step",
+                    "id": row.step_id,
+                    "phase": None,
+                    "rate": row.net_rate,
+                    "forward_rate": row.forward_rate,
+                    "reverse_rate": row.reverse_rate,
+                    "unit": row.unit,
+                    "active_site_count": None,
+                    "notes": None,
+                }
+            )
+        for row in self.species_rates:
+            rows.append(
+                {
+                    "row_type": "species",
+                    "id": row.species_id,
+                    "phase": row.phase,
+                    "rate": row.net_rate,
+                    "forward_rate": None,
+                    "reverse_rate": None,
+                    "unit": row.unit,
+                    "active_site_count": None,
+                    "notes": None,
+                }
+            )
+        if self.tof_species is not None:
+            rows.append(
+                {
+                    "row_type": "tof",
+                    "id": self.tof_species,
+                    "phase": None,
+                    "rate": self.turnover_frequency,
+                    "forward_rate": None,
+                    "reverse_rate": None,
+                    "unit": self.turnover_frequency_unit,
+                    "active_site_count": self.active_site_count,
+                    "notes": "TOF = net production rate / explicit active_site_count",
+                }
+            )
+        return rows
 
 
 @dataclass(frozen=True)
@@ -192,6 +267,109 @@ def build_rate_evaluator(
     temperature_K: float | None = None,
 ) -> RateEvaluator:
     return RateEvaluator(model=model, parameters=parameters, temperature_K=temperature_K)
+
+
+def microkinetic_rate_analysis(
+    model: MicrokineticModel,
+    parameters: RateParameterSet,
+    state: Mapping[str, float],
+    conditions: Mapping[str, float],
+    *,
+    temperature_K: float | None = None,
+    tof_species: str | None = None,
+    active_site_count: float | None = None,
+) -> MicrokineticRateAnalysis:
+    evaluator = build_rate_evaluator(model, parameters, temperature_K=temperature_K)
+    step_rates_by_id = evaluator.step_rates(state, conditions)
+    step_rates = tuple(step_rates_by_id[step.id] for step in model.steps)
+    species_rates = _species_production_rates(model, step_rates_by_id)
+    warnings = list(evaluator.site_balance_warnings(state))
+    turnover_frequency = None
+    turnover_frequency_unit = None
+    if tof_species is not None:
+        if active_site_count is None:
+            raise ValueError("active_site_count is required for TOF calculation")
+        if active_site_count <= 0:
+            raise ValueError("active_site_count must be positive")
+        species_rate = _find_species_rate(species_rates, tof_species)
+        turnover_frequency = species_rate.net_rate / active_site_count
+        turnover_frequency_unit = (
+            None
+            if species_rate.unit is None
+            else f"{species_rate.unit} per active_site"
+        )
+    return MicrokineticRateAnalysis(
+        step_rates=step_rates,
+        species_rates=species_rates,
+        tof_species=tof_species,
+        turnover_frequency=turnover_frequency,
+        turnover_frequency_unit=turnover_frequency_unit,
+        active_site_count=active_site_count,
+        warnings=tuple(warnings),
+    )
+
+
+def write_rate_analysis_csv(analysis: MicrokineticRateAnalysis, path: Path) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "row_type",
+                "id",
+                "phase",
+                "rate",
+                "forward_rate",
+                "reverse_rate",
+                "unit",
+                "active_site_count",
+                "notes",
+            ],
+        )
+        writer.writeheader()
+        for row in analysis.to_rows():
+            writer.writerow(row)
+
+
+def _species_production_rates(
+    model: MicrokineticModel,
+    step_rates: Mapping[str, StepRate],
+) -> tuple[SpeciesProductionRate, ...]:
+    rates = {species_id: 0.0 for species_id in model.species}
+    units: dict[str, str | None] = {species_id: None for species_id in model.species}
+    for step in model.steps:
+        step_rate = step_rates[step.id]
+        for species_id, coefficient in step.reactants.items():
+            if species_id in rates:
+                rates[species_id] -= coefficient * step_rate.net_rate
+                units[species_id] = step_rate.unit
+        for species_id, coefficient in step.products.items():
+            if species_id in rates:
+                rates[species_id] += coefficient * step_rate.net_rate
+                units[species_id] = step_rate.unit
+    rows = []
+    for species_id in sorted(rates):
+        species = model.species[species_id]
+        rows.append(
+            SpeciesProductionRate(
+                species_id=species_id,
+                phase=species.phase,
+                net_rate=rates[species_id],
+                unit=units[species_id],
+            )
+        )
+    return tuple(rows)
+
+
+def _find_species_rate(
+    species_rates: tuple[SpeciesProductionRate, ...],
+    species_id: str,
+) -> SpeciesProductionRate:
+    for row in species_rates:
+        if row.species_id == species_id:
+            return row
+    raise ValueError(f"TOF species {species_id!r} is not defined in the microkinetic model")
 
 
 def _state_value(state: Mapping[str, float], species_id: str) -> float:

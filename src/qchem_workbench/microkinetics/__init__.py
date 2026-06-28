@@ -25,10 +25,14 @@ from qchem_workbench.microkinetics.parameters import (
     rate_parameter_set_from_mapping,
 )
 from qchem_workbench.microkinetics.rates import (
+    MicrokineticRateAnalysis,
     RateEvaluator,
+    SpeciesProductionRate,
     SiteBalanceResidual,
     StepRate,
     build_rate_evaluator,
+    microkinetic_rate_analysis,
+    write_rate_analysis_csv,
 )
 from qchem_workbench.microkinetics.simulation import (
     MICROKINETIC_CONDITIONS_SCHEMA_VERSION,
@@ -53,11 +57,13 @@ __all__ = [
     "ElementaryStep",
     "EyringParameter",
     "MicrokineticModel",
+    "MicrokineticRateAnalysis",
     "MicrokineticSpecies",
     "RateConstant",
     "RateEvaluator",
     "RateParameterSet",
     "SciPyUnavailableError",
+    "SpeciesProductionRate",
     "SiteBalanceResidual",
     "SiteType",
     "SimulationResult",
@@ -71,6 +77,8 @@ __all__ = [
     "rate_parameter_set_from_mapping",
     "simulate_coverages",
     "solve_steady_state",
+    "microkinetic_rate_analysis",
+    "write_rate_analysis_csv",
     "write_simulation_csv",
     "write_steady_state_csv",
 ]

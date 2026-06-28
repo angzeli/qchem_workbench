@@ -88,6 +88,10 @@ from qchem_workbench.microkinetics.parameters import (
     load_rate_parameter_set,
     rate_parameter_set_from_mapping,
 )
+from qchem_workbench.microkinetics.rates import (
+    microkinetic_rate_analysis,
+    write_rate_analysis_csv,
+)
 from qchem_workbench.microkinetics.schema import load_microkinetic_model
 from qchem_workbench.microkinetics.simulation import (
     SciPyUnavailableError,
@@ -487,6 +491,17 @@ def build_parser() -> argparse.ArgumentParser:
     microkinetics_steady_parser.add_argument("--out", required=True, type=Path)
     microkinetics_steady_parser.add_argument("--tolerance", type=float, default=1e-8)
     microkinetics_steady_parser.set_defaults(func=_microkinetics_steady_state_command)
+    microkinetics_rates_parser = microkinetics_subparsers.add_parser(
+        "rates",
+        help="compute step rates, species rates, and optional TOF",
+    )
+    microkinetics_rates_parser.add_argument("model", type=Path)
+    microkinetics_rates_parser.add_argument("--state", required=True, type=Path)
+    microkinetics_rates_parser.add_argument("--conditions", required=True, type=Path)
+    microkinetics_rates_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_rates_parser.add_argument("--tof-species")
+    microkinetics_rates_parser.add_argument("--site-count", type=float)
+    microkinetics_rates_parser.set_defaults(func=_microkinetics_rates_command)
 
     run_project_parser = subparsers.add_parser(
         "run-project", help="run explicitly configured project manifest steps"
@@ -1185,10 +1200,64 @@ def _microkinetics_steady_state_command(args: argparse.Namespace) -> int:
     return 0 if result.success else 1
 
 
+def _microkinetics_rates_command(args: argparse.Namespace) -> int:
+    try:
+        model = load_microkinetic_model(args.model)
+        conditions = load_microkinetic_conditions(args.conditions)
+        parameters = _load_microkinetic_rate_parameters(conditions)
+        state = _load_microkinetic_state_csv(args.state)
+        analysis = microkinetic_rate_analysis(
+            model,
+            parameters,
+            state,
+            conditions.variables,
+            temperature_K=conditions.temperature_K,
+            tof_species=args.tof_species,
+            active_site_count=args.site_count,
+        )
+        write_rate_analysis_csv(analysis, args.out)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("row_type\tid\trate\tunit")
+    for row in analysis.to_rows():
+        rate = "" if row["rate"] is None else f"{row['rate']:.12g}"
+        print(f"{row['row_type']}\t{row['id']}\t{rate}\t{row['unit'] or ''}")
+    for warning in analysis.warnings:
+        print(f"warning\t{warning}")
+    print(f"Wrote microkinetic rate table to {args.out}.")
+    return 0
+
+
 def _load_microkinetic_rate_parameters(conditions):
     if conditions.rate_parameters_path is not None:
         return load_rate_parameter_set(conditions.rate_parameters_path)
     return rate_parameter_set_from_mapping(conditions.rate_parameters)
+
+
+def _load_microkinetic_state_csv(path: Path) -> dict[str, float]:
+    with Path(path).open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError(f"{path}: state CSV is empty")
+    if {"species", "coverage"}.issubset(rows[0]):
+        state = {}
+        for row in rows:
+            species_id = row.get("species", "").strip()
+            if not species_id:
+                raise ValueError(f"{path}: state row is missing species")
+            state[species_id] = float(row["coverage"])
+        return state
+    if len(rows) != 1:
+        raise ValueError(
+            f"{path}: trajectory-style state CSV must contain exactly one row"
+        )
+    return {
+        key: float(value)
+        for key, value in rows[0].items()
+        if key != "time" and value not in (None, "")
+    }
 
 
 def _result_for_species(
