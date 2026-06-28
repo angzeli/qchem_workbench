@@ -27,6 +27,10 @@ class AdsorbatePlacementConfig:
     anchor_atom: int
     target_position: tuple[float, float, float]
     height: float
+    site_id: str | None = None
+    site_type_label: str | None = None
+    surface_normal: tuple[float, float, float] | None = None
+    orient_vector: tuple[int, int] | None = None
     rotation_degrees_z: float | None = None
     notes: str | None = None
 
@@ -54,8 +58,29 @@ def load_adsorbate_placement_config(path: Path) -> AdsorbatePlacementConfig:
     if anchor_atom < 0:
         raise ValueError(f"{config_path}: anchor_atom must be zero or positive")
 
-    target_position = _required_vector3(config_path, placement, "target_position")
+    site = placement.get("site")
+    if site is not None and not isinstance(site, dict):
+        raise ValueError(f"{config_path}: site must be a mapping")
+    target_position = (
+        _site_coordinates(config_path, site)
+        if isinstance(site, dict)
+        else _required_vector3(config_path, placement, "target_position")
+    )
+    site_id = _optional_site_text(site, "site_id") if isinstance(site, dict) else None
+    site_type = (
+        _optional_site_text(site, "site_type_label")
+        if isinstance(site, dict)
+        else None
+    )
+    surface_normal = (
+        _optional_vector3(config_path, site, "surface_normal")
+        if isinstance(site, dict)
+        else _optional_vector3(config_path, placement, "surface_normal")
+    )
+    orient_vector = _optional_orient_vector(config_path, placement)
     height = _required_float(config_path, placement, "height")
+    if height <= 0:
+        raise ValueError(f"{config_path}: height must be positive")
     rotation = placement.get("rotation_degrees_z")
     return AdsorbatePlacementConfig(
         slab_structure_path=slab_path,
@@ -63,6 +88,10 @@ def load_adsorbate_placement_config(path: Path) -> AdsorbatePlacementConfig:
         anchor_atom=anchor_atom,
         target_position=target_position,
         height=height,
+        site_id=site_id,
+        site_type_label=site_type,
+        surface_normal=surface_normal,
+        orient_vector=orient_vector,
         rotation_degrees_z=None if rotation is None else float(rotation),
         notes=placement.get("notes"),
     )
@@ -87,6 +116,21 @@ def place_adsorbate(config: AdsorbatePlacementConfig) -> AtomisticStructure:
             center=anchor_position,
             rotate_cell=False,
         )
+    if config.orient_vector is not None:
+        if config.surface_normal is None:
+            raise ValueError("orient_vector requires a site or placement surface_normal")
+        from_atom, to_atom = config.orient_vector
+        _validate_adsorbate_atom_index(from_atom, len(adsorbate), "orient_vector.from_atom")
+        _validate_adsorbate_atom_index(to_atom, len(adsorbate), "orient_vector.to_atom")
+        vector = adsorbate.positions[to_atom] - adsorbate.positions[from_atom]
+        if float(vector.dot(vector)) == 0.0:
+            raise ValueError("orient_vector atoms must not define a zero-length vector")
+        adsorbate.rotate(
+            vector,
+            config.surface_normal,
+            center=anchor_position,
+            rotate_cell=False,
+        )
 
     desired_anchor = (
         config.target_position[0],
@@ -105,6 +149,12 @@ def place_adsorbate(config: AdsorbatePlacementConfig) -> AtomisticStructure:
         "anchor_atom": config.anchor_atom,
         "target_position": list(config.target_position),
         "height_angstrom": config.height,
+        "site_id": config.site_id,
+        "site_type_label": config.site_type_label,
+        "surface_normal": (
+            list(config.surface_normal) if config.surface_normal is not None else None
+        ),
+        "orient_vector": list(config.orient_vector) if config.orient_vector else None,
         "rotation_degrees_z": config.rotation_degrees_z,
         "notes": config.notes,
     }
@@ -162,3 +212,52 @@ def _required_vector3(
         raise ValueError(
             f"{config_path}: {key} must contain three numeric values"
         ) from exc
+
+
+def _optional_vector3(
+    config_path: Path,
+    data: dict[str, Any],
+    key: str,
+) -> tuple[float, float, float] | None:
+    if key not in data or data.get(key) is None:
+        return None
+    return _required_vector3(config_path, data, key)
+
+
+def _site_coordinates(
+    config_path: Path,
+    site: dict[str, Any],
+) -> tuple[float, float, float]:
+    if "coordinates" in site:
+        return _required_vector3(config_path, site, "coordinates")
+    return _required_vector3(config_path, site, "coordinates_angstrom")
+
+
+def _optional_site_text(site: dict[str, Any], key: str) -> str | None:
+    value = site.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"site {key} must be non-empty text")
+    return value.strip()
+
+
+def _optional_orient_vector(
+    config_path: Path,
+    placement: dict[str, Any],
+) -> tuple[int, int] | None:
+    value = placement.get("orient_vector")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"{config_path}: orient_vector must be a mapping")
+    from_atom = _required_int(config_path, value, "from_atom")
+    to_atom = _required_int(config_path, value, "to_atom")
+    return from_atom, to_atom
+
+
+def _validate_adsorbate_atom_index(index: int, atom_count: int, label: str) -> None:
+    if index < 0 or index >= atom_count:
+        raise ValueError(
+            f"{label} {index} is out of range for adsorbate with {atom_count} atoms"
+        )

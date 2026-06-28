@@ -1,0 +1,15 @@
+schema_version: 1
+placement:
+  slab_structure_path: slab.xyz
+  adsorbate_structure_path: co.xyz
+  anchor_atom: 0
+  height: 2.0
+  site:
+    site_id: synthetic_top_site
+    site_type_label: custom
+    coordinates: [0.0, 0.0, 0.0]
+    surface_normal: [0.0, 0.0, 1.0]
+  orient_vector:
+    from_atom: 0
+    to_atom: 1
+  notes: Synthetic placement template only; generated structure requires inspection.

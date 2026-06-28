@@ -12,3 +12,7 @@ Example command:
 ```bash
 qchemwb adsorption-table adsorption.yaml results.json --quantity electronic --out adsorption_table.csv
 ```
+
+`placement.yaml` shows the optional explicit-site adsorbate placement schema.
+It is a synthetic starting-geometry template only. qchem-workbench does not
+optimise the geometry or auto-detect active sites.
