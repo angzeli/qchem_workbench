@@ -76,3 +76,100 @@ def test_parse_qe_force_output(tmp_path):
     assert result.success is True
     assert result.metadata["max_force"] == pytest.approx(0.0012)
     assert result.metadata["max_force_unit"] == "Ry/bohr"
+
+
+def test_parse_qe_completed_relax_trajectory(tmp_path):
+    output_path = tmp_path / "relax.out"
+    output_path.write_text(
+        "number of atoms/cell      = 1\n"
+        "     convergence has been achieved in 4 iterations\n"
+        "!    total energy              =     -20.000000 Ry\n"
+        "Maximum force = 0.0100 Ry/bohr\n"
+        "     convergence has been achieved in 5 iterations\n"
+        "!    total energy              =     -21.000000 Ry\n"
+        "Maximum force = 0.0010 Ry/bohr\n"
+        "ATOMIC_POSITIONS (angstrom)\n"
+        "Cu 0.0 0.0 0.1\n"
+        "\n"
+        "End of BFGS Geometry Optimization\n"
+        "JOB DONE.\n",
+        encoding="utf-8",
+    )
+
+    result = parse_qe_output(output_path)
+    trajectory = result.metadata["relaxation_trajectory"]
+
+    assert result.success is True
+    assert len(trajectory["steps"]) == 2
+    assert trajectory["steps"][0]["total_energy_ry"] == -20.0
+    assert trajectory["final_total_energy_ry"] == -21.0
+    assert trajectory["final_max_force"] == pytest.approx(0.001)
+    assert trajectory["relaxation_converged"] is True
+    assert trajectory["final_atomic_positions"]["unit"] == "angstrom"
+    assert trajectory["final_atomic_positions"]["atoms"][0]["z"] == pytest.approx(0.1)
+
+
+def test_parse_qe_incomplete_relax_keeps_partial_trajectory(tmp_path):
+    output_path = tmp_path / "incomplete_relax.out"
+    output_path.write_text(
+        "!    total energy              =     -20.000000 Ry\n"
+        "Maximum force = 0.0100 Ry/bohr\n"
+        "!    total energy              =     -20.100000 Ry\n"
+        "Maximum force = 0.0080 Ry/bohr\n",
+        encoding="utf-8",
+    )
+
+    result = parse_qe_output(output_path)
+
+    assert result.success is False
+    assert result.metadata["relaxation_trajectory"]["steps"][0]["max_force"] == 0.01
+    assert "QE job completion marker was not found." in result.warnings
+    assert (
+        "QE relaxation trajectory has no final atomic positions."
+        in result.warnings
+    )
+
+
+def test_parse_qe_vc_relax_final_cell_uses_last_block(tmp_path):
+    output_path = tmp_path / "vc_relax.out"
+    output_path.write_text(
+        "CELL_PARAMETERS (angstrom)\n"
+        "3.0 0.0 0.0\n"
+        "0.0 3.0 0.0\n"
+        "0.0 0.0 10.0\n"
+        "!    total energy              =     -20.000000 Ry\n"
+        "CELL_PARAMETERS (angstrom)\n"
+        "3.1 0.0 0.0\n"
+        "0.0 3.1 0.0\n"
+        "0.0 0.0 10.5\n"
+        "!    total energy              =     -20.500000 Ry\n"
+        "ATOMIC_POSITIONS (angstrom)\n"
+        "Cu 0.0 0.0 0.2\n"
+        "bfgs converged in 2 scf cycles\n"
+        "JOB DONE.\n",
+        encoding="utf-8",
+    )
+
+    result = parse_qe_output(output_path)
+    trajectory = result.metadata["relaxation_trajectory"]
+
+    assert result.metadata["cell"][0] == [3.1, 0.0, 0.0]
+    assert trajectory["final_cell"]["vectors"][2] == [0.0, 0.0, 10.5]
+    assert trajectory["relaxation_converged"] is True
+
+
+def test_parse_qe_non_converged_relaxation(tmp_path):
+    output_path = tmp_path / "non_converged_relax.out"
+    output_path.write_text(
+        "!    total energy              =     -20.000000 Ry\n"
+        "Maximum force = 0.0500 Ry/bohr\n"
+        "relaxation NOT converged\n"
+        "JOB DONE.\n",
+        encoding="utf-8",
+    )
+
+    result = parse_qe_output(output_path)
+
+    assert result.success is False
+    assert result.metadata["relaxation_trajectory"]["relaxation_converged"] is False
+    assert "QE relaxation convergence was not achieved." in result.warnings

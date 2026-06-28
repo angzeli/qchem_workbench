@@ -80,6 +80,23 @@ def test_possible_spin_contamination_when_expected_spin_available():
     assert "possible_spin_contamination" in _codes(checks)
 
 
+def test_qe_relaxation_not_converged_warning():
+    checks = run_quality_checks(
+        [
+            _result(
+                backend="qe",
+                method=None,
+                basis=None,
+                metadata={
+                    "relaxation_trajectory": {"relaxation_converged": False}
+                },
+            )
+        ]
+    )
+
+    assert "qe_relaxation_not_converged" in _codes(checks)
+
+
 def test_mixed_method_warning():
     checks = run_quality_checks(
         [

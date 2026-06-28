@@ -111,6 +111,17 @@ def _check_single_result(
             )
         )
 
+    relaxation = result.metadata.get("relaxation_trajectory")
+    if isinstance(relaxation, dict) and relaxation.get("relaxation_converged") is False:
+        checks.append(
+            QualityCheck(
+                code="qe_relaxation_not_converged",
+                severity="warning",
+                message="QE relaxation metadata reports non-converged relaxation.",
+                result_identifier=identifier,
+            )
+        )
+
     spin_check = _spin_contamination_check(result, expected_multiplicities)
     if spin_check is not None:
         checks.append(spin_check)
