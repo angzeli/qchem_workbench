@@ -22,6 +22,9 @@ specific calculation contains every property.
 
 Gaussian, ORCA, and Quantum ESPRESSO support is input/output adapter support.
 qchem-workbench does not execute those engines in CI or at runtime.
+QE input rendering, output parsing, pseudopotential manifests, convergence
+tables, and surface placement caveats are documented in
+[`qe_surface_workflows.md`](qe_surface_workflows.md).
 
 Detailed Gaussian and ORCA property parsing support is documented in
 [`property_parsing.md`](property_parsing.md). Population charges, orbital

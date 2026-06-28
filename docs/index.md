@@ -16,7 +16,8 @@ ESPRESSO support is input/output adapter support.
 - Optional parsed molecular property containers for explicit Gaussian and ORCA
   output sections.
 - Optional PySCF and ASE integrations.
-- Generic reaction, adsorption, CHE-style, and screening bookkeeping.
+- Generic reaction, adsorption, CHE-style, convergence-study, and screening
+  bookkeeping.
 - Markdown, CSV, LaTeX, and plot-oriented report utilities.
 
 All examples using committed output files are synthetic fixtures unless stated

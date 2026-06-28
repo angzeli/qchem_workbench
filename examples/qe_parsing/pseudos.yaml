@@ -1,0 +1,11 @@
+schema_version: 1
+pseudopotentials:
+  Cu:
+    file: Cu.synthetic.UPF
+    family: Synthetic fixture family
+    functional: PBE
+    suggested_ecutwfc_ry: 40
+    suggested_ecutrho_ry: 320
+    source: Synthetic fixture only; user must provide real pseudopotentials.
+atomic_masses:
+  Cu: 63.546

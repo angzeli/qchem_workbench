@@ -15,6 +15,12 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from qchem_workbench.cli import main  # noqa: E402
+from qchem_workbench.backends.ase_adsorption import (  # noqa: E402
+    load_adsorbate_placement_config,
+)
+from qchem_workbench.backends.qe_pseudos import (  # noqa: E402
+    load_pseudopotential_manifest,
+)
 
 
 EXPECTED_EXAMPLE_DIRS = (
@@ -41,12 +47,14 @@ SCHEMA_CHECK_FILES = (
     "examples/screening_campaign/campaign.yaml",
     "examples/screening_campaign/results.json",
     "examples/surface_adsorption/results.json",
+    "examples/qe_parsing/convergence_results.json",
 )
 
 STATIC_SYNTHETIC_RESULT_STORES = (
     "examples/che_analysis/results.json",
     "examples/screening_campaign/results.json",
     "examples/surface_adsorption/results.json",
+    "examples/qe_parsing/convergence_results.json",
 )
 
 
@@ -194,11 +202,24 @@ def validate_qe_parsing(work_dir: Path) -> None:
     run_cli(["parse-qe", str(example / "outputs"), "--out", str(results_path)])
     run_cli(["schema-check", str(results_path)])
     run_cli(["check-results", str(results_path)])
+    load_pseudopotential_manifest(example / "pseudos.yaml")
+    run_cli(
+        [
+            "convergence-table",
+            str(example / "convergence.yaml"),
+            str(example / "convergence_results.json"),
+            "--out",
+            str(work_dir / "qe_convergence.csv"),
+        ]
+    )
 
 
 def validate_surface_adsorption(work_dir: Path) -> None:
     example = REPO_ROOT / "examples" / "surface_adsorption"
 
+    load_adsorbate_placement_config(example / "placement.yaml")
+    run_cli(["inspect-structure", str(example / "slab.xyz")])
+    run_cli(["inspect-structure", str(example / "co.xyz")])
     run_cli(
         [
             "adsorption-table",

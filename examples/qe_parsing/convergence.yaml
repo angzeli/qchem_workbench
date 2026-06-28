@@ -1,0 +1,13 @@
+schema_version: 1
+convergence_study:
+  name: synthetic_cu_cutoff_test
+  quantity: total_energy
+  variable:
+    type: ecutwfc
+    values: [30, 40, 50]
+  fixed_settings:
+    ecutrho: 320
+    kpoints: [2, 2, 1]
+  tolerance:
+    value: 0.02
+    unit: eV_per_atom

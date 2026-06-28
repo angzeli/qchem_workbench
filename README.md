@@ -267,9 +267,17 @@ Parse QE-like output files:
 qchemwb parse-qe /path/to/qe_outputs --out /tmp/qe-results.json --csv /tmp/qe-results.csv
 ```
 
+QE cutoff or k-point convergence studies can be organised from explicit
+synthetic or parsed result stores:
+
+```bash
+qchemwb convergence-table examples/qe_parsing/convergence.yaml examples/qe_parsing/convergence_results.json --out /tmp/qe-convergence.csv
+```
+
 Generated QE inputs are starting points for human inspection. Cutoffs,
 k-points, cells, pseudopotentials, smearing, and convergence settings are not
 guaranteed to be suitable for production calculations.
+See `docs/qe_surface_workflows.md` for QE and surface workflow caveats.
 
 ## Species Registry Format
 

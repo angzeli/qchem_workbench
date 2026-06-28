@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "results": [
+    {
+      "species_name": "synthetic_cu_ecut30",
+      "backend": "qe",
+      "method": "pbe",
+      "basis": "ecutwfc=30",
+      "task": "scf",
+      "success": true,
+      "metadata": {
+        "fixture": "synthetic",
+        "ecutwfc": 30,
+        "total_energy_ev": -100.0,
+        "n_atoms": 1
+      }
+    },
+    {
+      "species_name": "synthetic_cu_ecut40",
+      "backend": "qe",
+      "method": "pbe",
+      "basis": "ecutwfc=40",
+      "task": "scf",
+      "success": true,
+      "metadata": {
+        "fixture": "synthetic",
+        "ecutwfc": 40,
+        "total_energy_ev": -100.05,
+        "n_atoms": 1
+      }
+    },
+    {
+      "species_name": "synthetic_cu_ecut50",
+      "backend": "qe",
+      "method": "pbe",
+      "basis": "ecutwfc=50",
+      "task": "scf",
+      "success": true,
+      "metadata": {
+        "fixture": "synthetic",
+        "ecutwfc": 50,
+        "total_energy_ev": -100.06,
+        "n_atoms": 1
+      }
+    }
+  ]
+}
