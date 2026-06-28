@@ -24,6 +24,12 @@ from qchem_workbench.microkinetics.parameters import (
     load_rate_parameter_set,
     rate_parameter_set_from_mapping,
 )
+from qchem_workbench.microkinetics.rates import (
+    RateEvaluator,
+    SiteBalanceResidual,
+    StepRate,
+    build_rate_evaluator,
+)
 
 __all__ = [
     "BOLTZMANN_EV_PER_K",
@@ -36,8 +42,12 @@ __all__ = [
     "MicrokineticModel",
     "MicrokineticSpecies",
     "RateConstant",
+    "RateEvaluator",
     "RateParameterSet",
+    "SiteBalanceResidual",
     "SiteType",
+    "StepRate",
+    "build_rate_evaluator",
     "load_microkinetic_model",
     "load_rate_parameter_set",
     "rate_parameter_set_from_mapping",
