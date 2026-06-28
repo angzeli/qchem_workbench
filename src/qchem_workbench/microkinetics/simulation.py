@@ -51,6 +51,30 @@ class SimulationResult:
         return rows
 
 
+@dataclass(frozen=True)
+class SteadyStateResult:
+    coverages: dict[str, float]
+    residuals: dict[str, float]
+    max_abs_residual: float
+    success: bool
+    solver_message: str | None = None
+    warnings: tuple[str, ...] = ()
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def rows(self) -> list[dict[str, float | str | bool | None]]:
+        return [
+            {
+                "species": species_id,
+                "coverage": self.coverages.get(species_id),
+                "residual": self.residuals.get(species_id),
+                "success": self.success,
+                "max_abs_residual": self.max_abs_residual,
+                "solver_message": self.solver_message,
+            }
+            for species_id in sorted(self.coverages)
+        ]
+
+
 def load_microkinetic_conditions(path: Path) -> MicrokineticConditions:
     conditions_path = Path(path)
     data = yaml.safe_load(conditions_path.read_text(encoding="utf-8"))
@@ -155,12 +179,92 @@ def simulate_coverages(
     )
 
 
+def solve_steady_state(
+    model: MicrokineticModel,
+    parameters: RateParameterSet,
+    initial_guess: Mapping[str, float],
+    conditions: Mapping[str, float],
+    *,
+    temperature_K: float | None = None,
+    tolerance: float = 1e-8,
+    max_function_evaluations: int | None = None,
+) -> SteadyStateResult:
+    root = _root_solver()
+    evaluator = build_rate_evaluator(model, parameters, temperature_K=temperature_K)
+    variable_ids = evaluator.dynamic_variable_ids
+    _validate_initial_coverages(variable_ids, initial_guess)
+    initial_vector = [float(initial_guess[species_id]) for species_id in variable_ids]
+
+    def residual_vector(vector: list[float]) -> list[float]:
+        state = {
+            species_id: float(vector[index])
+            for index, species_id in enumerate(variable_ids)
+        }
+        residuals = _steady_state_residuals(evaluator, state, conditions)
+        return [residuals[species_id] for species_id in variable_ids]
+
+    options = (
+        {"maxfev": max_function_evaluations}
+        if max_function_evaluations is not None
+        else None
+    )
+    solution = root(residual_vector, initial_vector, options=options)
+    state = {
+        species_id: float(solution.x[index])
+        for index, species_id in enumerate(variable_ids)
+    }
+    residuals = _steady_state_residuals(evaluator, state, conditions)
+    max_abs_residual = max((abs(value) for value in residuals.values()), default=0.0)
+    warnings = list(evaluator.site_balance_warnings(state, tolerance=tolerance))
+    if any(value < -tolerance for value in state.values()):
+        warnings.append("one or more steady-state coverages are negative beyond tolerance")
+    success = bool(solution.success) and max_abs_residual <= tolerance
+    if not success:
+        warnings.append(
+            f"steady-state solve did not meet tolerance; max residual {max_abs_residual:g}"
+        )
+    return SteadyStateResult(
+        coverages=state,
+        residuals=residuals,
+        max_abs_residual=max_abs_residual,
+        success=success,
+        solver_message=str(solution.message),
+        warnings=tuple(warnings),
+        metadata={
+            "temperature_K": temperature_K,
+            "tolerance": tolerance,
+            "max_function_evaluations": max_function_evaluations,
+            "solver": "scipy.optimize.root",
+        },
+    )
+
+
 def write_simulation_csv(result: SimulationResult, path: Path) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = ["time", *sorted(result.coverages)]
     with output_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in result.rows():
+            writer.writerow(row)
+
+
+def write_steady_state_csv(result: SteadyStateResult, path: Path) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "species",
+                "coverage",
+                "residual",
+                "success",
+                "max_abs_residual",
+                "solver_message",
+            ],
+        )
         writer.writeheader()
         for row in result.rows():
             writer.writerow(row)
@@ -175,6 +279,44 @@ def _solve_ivp():
     from scipy.integrate import solve_ivp
 
     return solve_ivp
+
+
+def _root_solver():
+    if importlib.util.find_spec("scipy") is None:
+        raise SciPyUnavailableError(
+            "SciPy is required for microkinetic steady-state solving. "
+            "Install the optional dependency with qchem-workbench[scipy]."
+        )
+    from scipy.optimize import root
+
+    return root
+
+
+def _steady_state_residuals(
+    evaluator,
+    state: Mapping[str, float],
+    conditions: Mapping[str, float],
+) -> dict[str, float]:
+    residuals = evaluator.rate_vector(state, conditions)
+    for site_id, site_type in evaluator.model.site_types.items():
+        if site_type.total_sites is None:
+            continue
+        participants = [site_id]
+        participants.extend(
+            species.id
+            for species in evaluator.model.surface_species.values()
+            if species.site_type == site_id
+        )
+        participants = [
+            species_id
+            for species_id in participants
+            if species_id in evaluator.dynamic_variable_ids
+        ]
+        if not participants:
+            continue
+        occupied = sum(float(state.get(species_id, 0.0)) for species_id in participants)
+        residuals[participants[0]] = site_type.total_sites - occupied
+    return residuals
 
 
 def _validated_time_grid(times: tuple[float, ...] | list[float]) -> tuple[float, ...]:

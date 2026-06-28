@@ -478,6 +478,15 @@ def build_parser() -> argparse.ArgumentParser:
     microkinetics_simulate_parser.add_argument("--conditions", required=True, type=Path)
     microkinetics_simulate_parser.add_argument("--out", required=True, type=Path)
     microkinetics_simulate_parser.set_defaults(func=_microkinetics_simulate_command)
+    microkinetics_steady_parser = microkinetics_subparsers.add_parser(
+        "steady-state",
+        help="solve steady-state coverages with optional SciPy",
+    )
+    microkinetics_steady_parser.add_argument("model", type=Path)
+    microkinetics_steady_parser.add_argument("--conditions", required=True, type=Path)
+    microkinetics_steady_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_steady_parser.add_argument("--tolerance", type=float, default=1e-8)
+    microkinetics_steady_parser.set_defaults(func=_microkinetics_steady_state_command)
 
     run_project_parser = subparsers.add_parser(
         "run-project", help="run explicitly configured project manifest steps"
@@ -1136,6 +1145,43 @@ def _microkinetics_simulate_command(args: argparse.Namespace) -> int:
     for warning in result.warnings:
         print(f"warning\t{warning}")
     print(f"Wrote microkinetic trajectory to {args.out}.")
+    return 0 if result.success else 1
+
+
+def _microkinetics_steady_state_command(args: argparse.Namespace) -> int:
+    try:
+        from qchem_workbench.microkinetics.simulation import (
+            solve_steady_state,
+            write_steady_state_csv,
+        )
+
+        model = load_microkinetic_model(args.model)
+        conditions = load_microkinetic_conditions(args.conditions)
+        parameters = _load_microkinetic_rate_parameters(conditions)
+        result = solve_steady_state(
+            model,
+            parameters,
+            conditions.initial_coverages,
+            conditions.variables,
+            temperature_K=conditions.temperature_K,
+            tolerance=args.tolerance,
+        )
+        write_steady_state_csv(result, args.out)
+    except (OSError, ValueError, KeyError, SciPyUnavailableError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("species\tcoverage\tresidual")
+    for species_id in sorted(result.coverages):
+        print(
+            f"{species_id}\t{result.coverages[species_id]:.12g}\t"
+            f"{result.residuals[species_id]:.12g}"
+        )
+    print(f"success\t{result.success}")
+    print(f"max_abs_residual\t{result.max_abs_residual:.12g}")
+    for warning in result.warnings:
+        print(f"warning\t{warning}")
+    print(f"Wrote microkinetic steady state to {args.out}.")
     return 0 if result.success else 1
 
 

@@ -35,9 +35,12 @@ from qchem_workbench.microkinetics.simulation import (
     MicrokineticConditions,
     SciPyUnavailableError,
     SimulationResult,
+    SteadyStateResult,
     load_microkinetic_conditions,
     simulate_coverages,
+    solve_steady_state,
     write_simulation_csv,
+    write_steady_state_csv,
 )
 
 __all__ = [
@@ -58,6 +61,7 @@ __all__ = [
     "SiteBalanceResidual",
     "SiteType",
     "SimulationResult",
+    "SteadyStateResult",
     "StepRate",
     "MicrokineticConditions",
     "build_rate_evaluator",
@@ -66,5 +70,7 @@ __all__ = [
     "load_rate_parameter_set",
     "rate_parameter_set_from_mapping",
     "simulate_coverages",
+    "solve_steady_state",
     "write_simulation_csv",
+    "write_steady_state_csv",
 ]
