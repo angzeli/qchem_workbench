@@ -50,6 +50,13 @@ from qchem_workbench.backends.qe_input import (
     validate_pseudopotentials_for_elements,
 )
 from qchem_workbench.backends.qe_parser import parse_qe_output
+from qchem_workbench.backends.qe_pseudos import (
+    PSEUDOPOTENTIAL_MANIFEST_SCHEMA_VERSION,
+    CutoffSuggestion,
+    PseudopotentialManifest,
+    PseudopotentialRecord,
+    load_pseudopotential_manifest,
+)
 from qchem_workbench.backends.registry import (
     DEFAULT_BACKEND_REGISTRY,
     BackendCapabilities,
@@ -77,6 +84,9 @@ __all__ = [
     "ORCAInputOptions",
     "ORCA_TASK_PRESETS",
     "PySCFBackend",
+    "PSEUDOPOTENTIAL_MANIFEST_SCHEMA_VERSION",
+    "PseudopotentialManifest",
+    "PseudopotentialRecord",
     "QEInputSpec",
     "QEKPoints",
     "SCHEDULER_NAMES",
@@ -86,11 +96,13 @@ __all__ = [
     "add_vacuum",
     "build_fcc_surface",
     "built_in_backend_registry",
+    "CutoffSuggestion",
     "gaussian_route_from_spec",
     "get_backend",
     "from_ase_atoms",
     "list_backends",
     "load_adsorbate_placement_config",
+    "load_pseudopotential_manifest",
     "orca_route_from_spec",
     "parse_gaussian_output",
     "parse_orca_output",

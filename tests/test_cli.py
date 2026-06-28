@@ -310,6 +310,52 @@ def test_render_qe_from_fixture_structure(tmp_path, capsys):
     assert "Inspect pseudopotentials" in captured.out
 
 
+def test_render_qe_accepts_pseudopotential_manifest(tmp_path):
+    structure_path = tmp_path / "h.xyz"
+    structure_path.write_text(
+        "1\nsynthetic fixture hydrogen atom\nH 0 0 0\n",
+        encoding="utf-8",
+    )
+    pseudo_map = tmp_path / "pseudos.yaml"
+    pseudo_map.write_text(
+        "schema_version: 1\n"
+        "pseudopotentials:\n"
+        "  H:\n"
+        "    file: H.pbe.UPF\n"
+        "    family: Synthetic fixture family\n"
+        "    functional: PBE\n"
+        "    suggested_ecutwfc_ry: 30\n"
+        "    suggested_ecutrho_ry: 240\n"
+        "    source: Synthetic fixture only\n"
+        "atomic_masses:\n"
+        "  H: 1.008\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "h.in"
+
+    exit_code = main(
+        [
+            "render-qe",
+            str(structure_path),
+            "--pseudo-map",
+            str(pseudo_map),
+            "--out",
+            str(out_path),
+            "--ecutwfc",
+            "30",
+            "--cell",
+            "10",
+            "10",
+            "10",
+            "--gamma-only",
+        ]
+    )
+
+    rendered = out_path.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "ATOMIC_SPECIES\nH 1.008 H.pbe.UPF\n" in rendered
+
+
 def test_render_qe_missing_pseudo_map(tmp_path, capsys):
     structure_path = tmp_path / "h.xyz"
     structure_path.write_text(

@@ -250,6 +250,11 @@ atomic_masses:
   H: 1.008
 ```
 
+Schema-versioned pseudopotential manifests can also track user-provided
+filename, family, functional, suggested cutoffs, and source/provenance metadata.
+qchem-workbench records that metadata; it does not download, choose, or validate
+the scientific suitability of pseudopotentials.
+
 Render an input file:
 
 ```bash

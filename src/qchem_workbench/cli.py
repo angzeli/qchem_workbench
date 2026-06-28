@@ -70,6 +70,7 @@ from qchem_workbench.backends.qe_input import (
     render_qe_pw_input,
 )
 from qchem_workbench.backends.qe_parser import parse_qe_output
+from qchem_workbench.backends.qe_pseudos import load_pseudopotential_manifest
 from qchem_workbench.backends.registry import list_backends
 from qchem_workbench.core.calculation import CalculationSpec
 from qchem_workbench.core.geometry import read_xyz_frames, write_xyz_frames
@@ -1169,6 +1170,18 @@ def _load_qe_pseudo_map(path: Path) -> tuple[dict[str, str], dict[str, float]]:
     data = yaml.safe_load(pseudo_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{pseudo_path}: QE pseudo map must be a mapping")
+    if data.get("schema_version") == 1:
+        manifest = load_pseudopotential_manifest(pseudo_path)
+        atomic_masses = data.get("atomic_masses", {})
+        if not isinstance(atomic_masses, dict):
+            raise ValueError(f"{pseudo_path}: atomic_masses must be a mapping")
+        return (
+            {
+                element: record.filename
+                for element, record in manifest.records.items()
+            },
+            dict(atomic_masses),
+        )
 
     if "pseudopotentials" in data or "atomic_masses" in data:
         pseudopotentials = data.get("pseudopotentials", {})
