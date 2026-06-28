@@ -1965,6 +1965,149 @@ def test_che_table_csv_output_has_units(tmp_path):
     assert "CHE pH correction" in rows[0]["correction_terms"]
 
 
+def test_convergence_table_complete(tmp_path, capsys):
+    study_path = _write_convergence_cli_fixture(tmp_path)
+    results_path = tmp_path / "results.json"
+    _write_convergence_cli_results(results_path, energies=(-100.0, -100.03, -100.04))
+    out_path = tmp_path / "convergence.csv"
+
+    exit_code = main(
+        [
+            "convergence-table",
+            str(study_path),
+            str(results_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "variable_value\tcomplete\tenergy_ev" in captured.out
+    assert rows[0]["variable_value"] == "40"
+    assert rows[1]["delta_from_previous_eV"] == "-0.030000000000001137"
+    assert rows[2]["within_tolerance"] == "True"
+
+
+def test_convergence_table_missing_value(tmp_path):
+    study_path = _write_convergence_cli_fixture(tmp_path)
+    results_path = tmp_path / "results.json"
+    _write_convergence_cli_results(results_path, values=(40, 60), energies=(-100, -101))
+    out_path = tmp_path / "convergence.csv"
+
+    exit_code = main(
+        [
+            "convergence-table",
+            str(study_path),
+            str(results_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert rows[1]["complete"] == "False"
+    assert rows[1]["missing_reason"] == "missing_result"
+
+
+def test_convergence_table_nonmonotonic_energies(tmp_path):
+    study_path = _write_convergence_cli_fixture(tmp_path)
+    results_path = tmp_path / "results.json"
+    _write_convergence_cli_results(results_path, energies=(-100.0, -99.9, -99.95))
+    out_path = tmp_path / "convergence.csv"
+
+    exit_code = main(
+        [
+            "convergence-table",
+            str(study_path),
+            str(results_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert rows[1]["delta_from_previous_eV"] == "0.09999999999999432"
+    assert rows[1]["within_tolerance"] == "False"
+
+
+def test_convergence_table_tolerance_flagging(tmp_path):
+    study_path = _write_convergence_cli_fixture(
+        tmp_path,
+        tolerance="    value: 0.2\n    unit: eV\n",
+    )
+    results_path = tmp_path / "results.json"
+    _write_convergence_cli_results(results_path, energies=(-100.0, -99.9, -99.95))
+    out_path = tmp_path / "convergence.csv"
+
+    exit_code = main(
+        [
+            "convergence-table",
+            str(study_path),
+            str(results_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    rows = list(csv.DictReader(out_path.open(encoding="utf-8", newline="")))
+    assert exit_code == 0
+    assert rows[1]["within_tolerance"] == "True"
+
+
+def _write_convergence_cli_fixture(
+    tmp_path,
+    *,
+    tolerance: str = "    value: 0.01\n    unit: eV_per_atom\n",
+):
+    path = tmp_path / "convergence.yaml"
+    path.write_text(
+        "schema_version: 1\n"
+        "convergence_study:\n"
+        "  name: synthetic cutoff test\n"
+        "  quantity: total_energy\n"
+        "  variable:\n"
+        "    type: ecutwfc\n"
+        "    values: [40, 50, 60]\n"
+        "  fixed_settings:\n"
+        "    ecutrho: 480\n"
+        "  tolerance:\n"
+        f"{tolerance}",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_convergence_cli_results(
+    results_path,
+    *,
+    values=(40, 50, 60),
+    energies=(-100.0, -100.03, -100.04),
+):
+    save_result_collection(
+        results_path,
+        [
+            CalculationResult(
+                species_name=f"synthetic_{value}",
+                backend="qe",
+                method=None,
+                basis=None,
+                task="scf",
+                success=True,
+                metadata={
+                    "ecutwfc": value,
+                    "total_energy_ev": energy,
+                    "n_atoms": 2,
+                },
+            )
+            for value, energy in zip(values, energies)
+        ],
+    )
+
+
 def test_select_conformers_writes_json(tmp_path, capsys):
     results_path = tmp_path / "results.json"
     out_path = tmp_path / "selected_conformers.json"

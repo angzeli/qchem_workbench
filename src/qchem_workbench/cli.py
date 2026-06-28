@@ -24,6 +24,11 @@ from qchem_workbench.analysis.che import (
     load_che_pathway,
 )
 from qchem_workbench.analysis.conformers import select_lowest_energy_conformers
+from qchem_workbench.analysis.convergence import (
+    ConvergenceRow,
+    convergence_table,
+    load_convergence_study,
+)
 from qchem_workbench.analysis.quality_checks import QualityCheck, run_quality_checks
 from qchem_workbench.analysis.reactions import ReactionEnergyRow
 from qchem_workbench.analysis.reactions import load_pathway
@@ -365,6 +370,15 @@ def build_parser() -> argparse.ArgumentParser:
     che_table_parser.add_argument("results", type=Path)
     che_table_parser.add_argument("--out", required=True, type=Path)
     che_table_parser.set_defaults(func=_che_table_command)
+
+    convergence_table_parser = subparsers.add_parser(
+        "convergence-table",
+        help="compute a plane-wave convergence study table",
+    )
+    convergence_table_parser.add_argument("study", type=Path)
+    convergence_table_parser.add_argument("results", type=Path)
+    convergence_table_parser.add_argument("--out", required=True, type=Path)
+    convergence_table_parser.set_defaults(func=_convergence_table_command)
 
     select_conformers_parser = subparsers.add_parser(
         "select-conformers", help="select lowest-energy conformer results"
@@ -870,6 +884,32 @@ def _che_table_command(args: argparse.Namespace) -> int:
         print(
             f"{row.reaction_id}\t{row.complete}\t{uncorrected}\t"
             f"{corrected}\t{';'.join(row.missing_species)}"
+        )
+    return 0
+
+
+def _convergence_table_command(args: argparse.Namespace) -> int:
+    try:
+        study = load_convergence_study(args.study)
+        results = load_result_collection(args.results)
+        rows = convergence_table(study, results)
+        _write_convergence_table_csv(args.out, rows)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("variable_value\tcomplete\tenergy_ev\tdelta_ev\twithin_tolerance\tmissing")
+    for row in rows:
+        energy = "" if row.energy_ev is None else f"{row.energy_ev:.12g}"
+        delta = (
+            ""
+            if row.delta_from_previous_ev is None
+            else f"{row.delta_from_previous_ev:.12g}"
+        )
+        within = "" if row.within_tolerance is None else str(row.within_tolerance)
+        print(
+            f"{row.variable_value}\t{row.complete}\t{energy}\t{delta}\t"
+            f"{within}\t{row.missing_reason or ''}"
         )
     return 0
 
@@ -2010,6 +2050,40 @@ def _write_che_table_csv(path: Path, rows: list[CHEFreeEnergyRow]) -> None:
                     "missing_species": ";".join(row.missing_species),
                     "warnings": ";".join(row.warnings),
                     "notes": row.notes,
+                }
+            )
+
+
+def _write_convergence_table_csv(path: Path, rows: list[ConvergenceRow]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "variable_value",
+                "complete",
+                "energy_eV",
+                "delta_from_previous_eV",
+                "delta_from_previous_eV_per_atom",
+                "within_tolerance",
+                "n_atoms",
+                "missing_reason",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "variable_value": row.variable_value,
+                    "complete": row.complete,
+                    "energy_eV": row.energy_ev,
+                    "delta_from_previous_eV": row.delta_from_previous_ev,
+                    "delta_from_previous_eV_per_atom": (
+                        row.delta_from_previous_ev_per_atom
+                    ),
+                    "within_tolerance": row.within_tolerance,
+                    "n_atoms": row.n_atoms,
+                    "missing_reason": row.missing_reason,
                 }
             )
 
