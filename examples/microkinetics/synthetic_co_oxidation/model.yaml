@@ -1,0 +1,60 @@
+schema_version: 1
+microkinetic_model:
+  name: synthetic_co_oxidation_microkinetic
+  notes: Synthetic example for workflow validation only; not a validated mechanism.
+  provenance: qchem-workbench synthetic fixture
+  site_types:
+    - id: star
+      total_sites: 1.0
+      unit: fraction
+      notes: Explicit vacant site fraction.
+  species:
+    gas:
+      CO_g:
+        phase: gas
+      O2_g:
+        phase: gas
+      CO2_g:
+        phase: gas
+    surface:
+      CO_star:
+        phase: surface
+        site_type: star
+      O_star:
+        phase: surface
+        site_type: star
+  steps:
+    - id: co_ads
+      reversible: true
+      reactants:
+        CO_g: 1
+        star: 1
+      products:
+        CO_star: 1
+      rate_constant_forward: k_co_ads_f
+      rate_constant_reverse: k_co_ads_r
+      notes: Synthetic adsorption/desorption step.
+    - id: o2_dissociation
+      reversible: false
+      reactants:
+        O2_g: 1
+        star: 2
+      products:
+        O_star: 2
+      rate_constant_forward: k_o2_diss
+      notes: Synthetic dissociative adsorption step.
+    - id: co_oxidation
+      reversible: false
+      reactants:
+        CO_star: 1
+        O_star: 1
+      products:
+        CO2_g: 1
+        star: 2
+      rate_constant_forward: k_co_oxid
+      notes: Synthetic product-forming step.
+  rate_parameters:
+    - k_co_ads_f
+    - k_co_ads_r
+    - k_o2_diss
+    - k_co_oxid

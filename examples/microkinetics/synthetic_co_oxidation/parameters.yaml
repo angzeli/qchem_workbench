@@ -1,0 +1,19 @@
+schema_version: 1
+rate_parameters:
+  rate_constants:
+    k_co_ads_f:
+      value: 1.0
+      unit: s^-1
+      source: Synthetic fixture value
+    k_co_ads_r:
+      value: 0.2
+      unit: s^-1
+      source: Synthetic fixture value
+    k_o2_diss:
+      value: 0.1
+      unit: s^-1
+      source: Synthetic fixture value
+    k_co_oxid:
+      value: 0.5
+      unit: s^-1
+      source: Synthetic fixture value

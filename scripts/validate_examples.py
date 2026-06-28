@@ -4,12 +4,18 @@
 from __future__ import annotations
 
 import json
+import importlib.util
+import os
 import sys
 import tempfile
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault(
+    "MPLCONFIGDIR",
+    str(Path(tempfile.gettempdir()) / "qchemwb-matplotlib"),
+)
 SRC_PATH = REPO_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
@@ -20,6 +26,11 @@ from qchem_workbench.backends.ase_adsorption import (  # noqa: E402
 )
 from qchem_workbench.backends.qe_pseudos import (  # noqa: E402
     load_pseudopotential_manifest,
+)
+from qchem_workbench.microkinetics.parameters import load_rate_parameter_set  # noqa: E402
+from qchem_workbench.microkinetics.schema import load_microkinetic_model  # noqa: E402
+from qchem_workbench.microkinetics.uncertainty import (  # noqa: E402
+    load_parameter_distributions,
 )
 
 
@@ -32,6 +43,7 @@ EXPECTED_EXAMPLE_DIRS = (
     "surface_adsorption",
     "che_analysis",
     "screening_campaign",
+    "microkinetics/synthetic_co_oxidation",
 )
 
 SYNTHETIC_FIXTURE_EXAMPLE_DIRS = EXPECTED_EXAMPLE_DIRS
@@ -271,6 +283,126 @@ def validate_screening_campaign(work_dir: Path) -> None:
     )
 
 
+def validate_microkinetics(work_dir: Path) -> None:
+    example = REPO_ROOT / "examples" / "microkinetics" / "synthetic_co_oxidation"
+
+    load_microkinetic_model(example / "model.yaml")
+    load_rate_parameter_set(example / "parameters.yaml")
+    load_parameter_distributions(example / "distributions.yaml")
+    run_cli(
+        [
+            "microkinetics",
+            "rates",
+            str(example / "model.yaml"),
+            "--state",
+            str(example / "expected_outputs" / "mk_steady_state.csv"),
+            "--conditions",
+            str(example / "conditions.yaml"),
+            "--tof-species",
+            "CO2_g",
+            "--site-count",
+            "1.0",
+            "--out",
+            str(work_dir / "mk_rates.csv"),
+        ]
+    )
+    run_cli(
+        [
+            "microkinetics",
+            "plot-rates",
+            str(example / "expected_outputs" / "mk_rates.csv"),
+            "--out",
+            str(work_dir / "mk_rates.png"),
+        ]
+    )
+    run_cli(
+        [
+            "microkinetics",
+            "plot-sensitivity",
+            str(example / "expected_outputs" / "sensitivity.csv"),
+            "--out",
+            str(work_dir / "mk_sensitivity.png"),
+        ]
+    )
+
+    if importlib.util.find_spec("scipy") is None:
+        print("[v2 example gate] scipy not installed; skipping optional microkinetic solves")
+        return
+
+    trajectory_path = work_dir / "mk_trajectory.csv"
+    steady_path = work_dir / "mk_steady_state.csv"
+    sensitivity_path = work_dir / "mk_sensitivity.csv"
+    uncertainty_path = work_dir / "mk_uncertainty.csv"
+    run_cli(
+        [
+            "microkinetics",
+            "simulate",
+            str(example / "model.yaml"),
+            "--conditions",
+            str(example / "conditions.yaml"),
+            "--out",
+            str(trajectory_path),
+        ]
+    )
+    run_cli(
+        [
+            "microkinetics",
+            "steady-state",
+            str(example / "model.yaml"),
+            "--conditions",
+            str(example / "conditions.yaml"),
+            "--out",
+            str(steady_path),
+        ]
+    )
+    run_cli(
+        [
+            "microkinetics",
+            "sensitivity",
+            str(example / "model.yaml"),
+            "--conditions",
+            str(example / "conditions.yaml"),
+            "--observable",
+            "product_rate:CO2_g",
+            "--out",
+            str(sensitivity_path),
+        ]
+    )
+    run_cli(
+        [
+            "microkinetics",
+            "sample",
+            str(example / "model.yaml"),
+            "--conditions",
+            str(example / "conditions.yaml"),
+            "--n",
+            "5",
+            "--seed",
+            "1",
+            "--out",
+            str(uncertainty_path),
+        ]
+    )
+    run_cli(
+        [
+            "microkinetics",
+            "plot-trajectory",
+            str(trajectory_path),
+            "--out",
+            str(work_dir / "mk_trajectory.png"),
+        ]
+    )
+    run_cli(
+        [
+            "microkinetics",
+            "plot-uncertainty",
+            str(uncertainty_path),
+            "--out",
+            str(work_dir / "mk_uncertainty.png"),
+        ]
+    )
+
+
 def main_script() -> int:
     with tempfile.TemporaryDirectory(prefix="qchemwb-examples-") as temp_dir:
         work_dir = Path(temp_dir)
@@ -286,6 +418,7 @@ def main_script() -> int:
             ("surface adsorption workflow", validate_surface_adsorption),
             ("CHE analysis workflow", validate_che_analysis),
             ("screening campaign workflow", validate_screening_campaign),
+            ("microkinetics workflow", validate_microkinetics),
         )
         for label, step in steps:
             print(f"[v2 example gate] {label}")

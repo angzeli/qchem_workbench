@@ -13,6 +13,7 @@ nav:
   - Molecular Property Parsing: property_parsing.md
   - QE And Surface Workflows: qe_surface_workflows.md
   - Analysis Workflows: analysis_workflows.md
+  - Microkinetics: microkinetics.md
   - Campaign Workflows: campaign_workflows.md
   - Electrochemistry: electrochemistry.md
   - Scientific Caveats: scientific_caveats.md

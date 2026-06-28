@@ -1,0 +1,2 @@
+parameter_id,observable,perturbation_ln,baseline_value,perturbed_value,sensitivity,baseline_converged,perturbed_converged,warnings
+k_co_oxid,product_rate:CO2_g,0.01,0.005,0.0051,0.01,True,True,

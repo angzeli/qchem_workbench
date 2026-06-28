@@ -1,0 +1,16 @@
+schema_version: 1
+conditions:
+  temperature_K: 500.0
+  rate_parameters_path: parameters.yaml
+  parameter_distributions_path: distributions.yaml
+  observable: product_rate:CO2_g
+  variables:
+    CO_g: 1.0
+    O2_g: 0.5
+  initial_coverages:
+    CO_star: 0.1
+    O_star: 0.1
+    star: 0.8
+  time_grid: [0.0, 0.5, 1.0, 2.0]
+  metadata:
+    fixture: synthetic

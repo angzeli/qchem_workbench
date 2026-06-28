@@ -14,6 +14,8 @@ Implemented workflows include:
   pH, potential, and correction terms;
 - cutoff or k-point convergence tables from user-defined synthetic or parsed
   result sets;
+- microkinetic network simulation, steady-state solving, rate/TOF tables,
+  finite-difference sensitivity, and user-provided uncertainty sampling;
 - conformer selection by a chosen electronic or Gibbs energy field.
 
 Use separate commands for electronic and Gibbs quantities:
@@ -33,3 +35,13 @@ qchemwb convergence-table convergence.yaml results/qe_results.json --out results
 
 The convergence table marks differences relative to the user-provided tolerance
 only. Missing results remain visible.
+
+Microkinetic workflows are transparent mass-action bookkeeping for explicit
+networks and user-provided parameters. They do not generate mechanisms or rate
+constants automatically:
+
+```bash
+qchemwb microkinetics simulate model.yaml --conditions conditions.yaml --out mk_trajectory.csv
+qchemwb microkinetics steady-state model.yaml --conditions conditions.yaml --out mk_steady_state.csv
+qchemwb microkinetics rates model.yaml --state mk_steady_state.csv --conditions conditions.yaml --out mk_rates.csv
+```

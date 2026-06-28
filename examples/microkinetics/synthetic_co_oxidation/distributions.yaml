@@ -1,0 +1,25 @@
+schema_version: 1
+parameter_distributions:
+  k_co_ads_f:
+    distribution: uniform
+    low: 0.8
+    high: 1.2
+    unit: s^-1
+    source: Synthetic uncertainty range
+  k_co_ads_r:
+    distribution: fixed
+    value: 0.2
+    unit: s^-1
+    source: Synthetic uncertainty range
+  k_o2_diss:
+    distribution: uniform
+    low: 0.08
+    high: 0.12
+    unit: s^-1
+    source: Synthetic uncertainty range
+  k_co_oxid:
+    distribution: loguniform
+    low: 0.4
+    high: 0.6
+    unit: s^-1
+    source: Synthetic uncertainty range

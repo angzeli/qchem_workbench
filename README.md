@@ -30,6 +30,10 @@ The current workflow support focuses on:
   validation.
 - Screening campaign manifests, descriptor tables, and transparent rule-based
   rankings. These are workflow tables, not activity predictions.
+- Transparent microkinetic network bookkeeping, optional SciPy simulation,
+  steady-state solving, rate/TOF tables, sensitivity, and user-provided
+  uncertainty sampling. These are model-management tools, not catalyst
+  performance predictions.
 
 CO2RR is included as the first domain example, not as the scope of the package.
 Core modules remain generic and backend-agnostic.
@@ -58,6 +62,12 @@ For optional RDKit conformer setup helpers:
 
 ```bash
 pip install -e ".[rdkit]"
+```
+
+For optional microkinetic ODE simulation and steady-state solving:
+
+```bash
+pip install -e ".[scipy]"
 ```
 
 For documentation builds:
@@ -143,6 +153,15 @@ Inspect backend adapter capabilities:
 
 ```bash
 qchemwb backends
+```
+
+Run a synthetic microkinetic example with user-provided rate constants:
+
+```bash
+cd examples/microkinetics/synthetic_co_oxidation
+qchemwb microkinetics simulate model.yaml --conditions conditions.yaml --out /tmp/mk_trajectory.csv
+qchemwb microkinetics steady-state model.yaml --conditions conditions.yaml --out /tmp/mk_steady_state.csv
+qchemwb microkinetics rates model.yaml --state /tmp/mk_steady_state.csv --conditions conditions.yaml --tof-species CO2_g --site-count 1.0 --out /tmp/mk_rates.csv
 ```
 
 ## PySCF Backend

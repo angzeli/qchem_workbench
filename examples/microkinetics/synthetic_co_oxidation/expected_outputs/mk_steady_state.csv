@@ -1,0 +1,4 @@
+species,coverage,residual,success,max_abs_residual,solver_message
+CO_star,0.1,0.0,True,0.0,synthetic fixture output shape
+O_star,0.1,0.0,True,0.0,synthetic fixture output shape
+star,0.8,0.0,True,0.0,synthetic fixture output shape

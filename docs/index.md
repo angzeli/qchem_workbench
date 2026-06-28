@@ -18,6 +18,9 @@ ESPRESSO support is input/output adapter support.
 - Optional PySCF and ASE integrations.
 - Generic reaction, adsorption, CHE-style, convergence-study, and screening
   bookkeeping.
+- Transparent microkinetic network bookkeeping, optional SciPy simulation,
+  steady-state solving, rate/TOF tables, sensitivity, and user-provided
+  uncertainty sampling.
 - Markdown, CSV, LaTeX, and plot-oriented report utilities.
 
 All examples using committed output files are synthetic fixtures unless stated

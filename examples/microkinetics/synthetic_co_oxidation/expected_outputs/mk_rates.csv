@@ -1,0 +1,4 @@
+row_type,id,phase,rate,forward_rate,reverse_rate,unit,active_site_count,notes
+step,co_oxidation,,0.005,0.005,0.0,s^-1,,
+species,CO2_g,gas,0.005,,,s^-1,,
+tof,CO2_g,,0.005,,,s^-1 per active_site,1.0,TOF = net production rate / explicit active_site_count
