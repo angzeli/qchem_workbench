@@ -30,10 +30,20 @@ from qchem_workbench.microkinetics.rates import (
     StepRate,
     build_rate_evaluator,
 )
+from qchem_workbench.microkinetics.simulation import (
+    MICROKINETIC_CONDITIONS_SCHEMA_VERSION,
+    MicrokineticConditions,
+    SciPyUnavailableError,
+    SimulationResult,
+    load_microkinetic_conditions,
+    simulate_coverages,
+    write_simulation_csv,
+)
 
 __all__ = [
     "BOLTZMANN_EV_PER_K",
     "MICROKINETIC_SCHEMA_VERSION",
+    "MICROKINETIC_CONDITIONS_SCHEMA_VERSION",
     "PLANCK_EV_S",
     "RATE_PARAMETER_SCHEMA_VERSION",
     "ArrheniusParameter",
@@ -44,11 +54,17 @@ __all__ = [
     "RateConstant",
     "RateEvaluator",
     "RateParameterSet",
+    "SciPyUnavailableError",
     "SiteBalanceResidual",
     "SiteType",
+    "SimulationResult",
     "StepRate",
+    "MicrokineticConditions",
     "build_rate_evaluator",
     "load_microkinetic_model",
+    "load_microkinetic_conditions",
     "load_rate_parameter_set",
     "rate_parameter_set_from_mapping",
+    "simulate_coverages",
+    "write_simulation_csv",
 ]

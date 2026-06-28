@@ -84,6 +84,17 @@ from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
 from qchem_workbench.campaigns import load_campaign_manifest
 from qchem_workbench.core.structure import AtomisticStructure
+from qchem_workbench.microkinetics.parameters import (
+    load_rate_parameter_set,
+    rate_parameter_set_from_mapping,
+)
+from qchem_workbench.microkinetics.schema import load_microkinetic_model
+from qchem_workbench.microkinetics.simulation import (
+    SciPyUnavailableError,
+    load_microkinetic_conditions,
+    simulate_coverages,
+    write_simulation_csv,
+)
 from qchem_workbench.projects.manifest import ProjectManifest, load_project_manifest
 from qchem_workbench.reports.exports import (
     PROPERTY_EXPORT_TYPES,
@@ -450,6 +461,23 @@ def build_parser() -> argparse.ArgumentParser:
     rank_candidates_parser.add_argument("descriptors", type=Path)
     rank_candidates_parser.add_argument("--out", required=True, type=Path)
     rank_candidates_parser.set_defaults(func=_rank_candidates_command)
+
+    microkinetics_parser = subparsers.add_parser(
+        "microkinetics",
+        help="run transparent microkinetic workflow helpers",
+    )
+    microkinetics_subparsers = microkinetics_parser.add_subparsers(
+        dest="microkinetics_command",
+        required=True,
+    )
+    microkinetics_simulate_parser = microkinetics_subparsers.add_parser(
+        "simulate",
+        help="simulate surface coverages with optional SciPy",
+    )
+    microkinetics_simulate_parser.add_argument("model", type=Path)
+    microkinetics_simulate_parser.add_argument("--conditions", required=True, type=Path)
+    microkinetics_simulate_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_simulate_parser.set_defaults(func=_microkinetics_simulate_command)
 
     run_project_parser = subparsers.add_parser(
         "run-project", help="run explicitly configured project manifest steps"
@@ -1080,6 +1108,41 @@ def _rank_candidates_command(args: argparse.Namespace) -> int:
         print(f"Excluded candidates\t{excluded_count}")
     print(f"Wrote ranked candidates to {args.out}.")
     return 0
+
+
+def _microkinetics_simulate_command(args: argparse.Namespace) -> int:
+    try:
+        model = load_microkinetic_model(args.model)
+        conditions = load_microkinetic_conditions(args.conditions)
+        parameters = _load_microkinetic_rate_parameters(conditions)
+        result = simulate_coverages(
+            model,
+            parameters,
+            conditions.initial_coverages,
+            conditions.variables,
+            conditions.time_grid,
+            temperature_K=conditions.temperature_K,
+        )
+        write_simulation_csv(result, args.out)
+    except (OSError, ValueError, KeyError, SciPyUnavailableError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("time_points\tspecies\tsuccess\twarnings")
+    print(
+        f"{len(result.times)}\t{';'.join(sorted(result.coverages))}\t"
+        f"{result.success}\t{len(result.warnings)}"
+    )
+    for warning in result.warnings:
+        print(f"warning\t{warning}")
+    print(f"Wrote microkinetic trajectory to {args.out}.")
+    return 0 if result.success else 1
+
+
+def _load_microkinetic_rate_parameters(conditions):
+    if conditions.rate_parameters_path is not None:
+        return load_rate_parameter_set(conditions.rate_parameters_path)
+    return rate_parameter_set_from_mapping(conditions.rate_parameters)
 
 
 def _result_for_species(
