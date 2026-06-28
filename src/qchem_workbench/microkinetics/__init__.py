@@ -46,6 +46,11 @@ from qchem_workbench.microkinetics.simulation import (
     write_simulation_csv,
     write_steady_state_csv,
 )
+from qchem_workbench.microkinetics.sensitivity import (
+    SensitivityRow,
+    microkinetic_sensitivity,
+    write_sensitivity_csv,
+)
 
 __all__ = [
     "BOLTZMANN_EV_PER_K",
@@ -69,6 +74,7 @@ __all__ = [
     "SimulationResult",
     "SteadyStateResult",
     "StepRate",
+    "SensitivityRow",
     "MicrokineticConditions",
     "build_rate_evaluator",
     "load_microkinetic_model",
@@ -78,7 +84,9 @@ __all__ = [
     "simulate_coverages",
     "solve_steady_state",
     "microkinetic_rate_analysis",
+    "microkinetic_sensitivity",
     "write_rate_analysis_csv",
+    "write_sensitivity_csv",
     "write_simulation_csv",
     "write_steady_state_csv",
 ]

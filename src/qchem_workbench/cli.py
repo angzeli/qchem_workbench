@@ -93,6 +93,10 @@ from qchem_workbench.microkinetics.rates import (
     write_rate_analysis_csv,
 )
 from qchem_workbench.microkinetics.schema import load_microkinetic_model
+from qchem_workbench.microkinetics.sensitivity import (
+    microkinetic_sensitivity,
+    write_sensitivity_csv,
+)
 from qchem_workbench.microkinetics.simulation import (
     SciPyUnavailableError,
     load_microkinetic_conditions,
@@ -502,6 +506,24 @@ def build_parser() -> argparse.ArgumentParser:
     microkinetics_rates_parser.add_argument("--tof-species")
     microkinetics_rates_parser.add_argument("--site-count", type=float)
     microkinetics_rates_parser.set_defaults(func=_microkinetics_rates_command)
+    microkinetics_sensitivity_parser = microkinetics_subparsers.add_parser(
+        "sensitivity",
+        help="finite-difference sensitivity to log-rate-constant perturbations",
+    )
+    microkinetics_sensitivity_parser.add_argument("model", type=Path)
+    microkinetics_sensitivity_parser.add_argument("--conditions", required=True, type=Path)
+    microkinetics_sensitivity_parser.add_argument("--observable", required=True)
+    microkinetics_sensitivity_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_sensitivity_parser.add_argument(
+        "--perturbation",
+        type=float,
+        default=1e-2,
+        help="positive perturbation in ln(k)",
+    )
+    microkinetics_sensitivity_parser.add_argument("--site-count", type=float)
+    microkinetics_sensitivity_parser.set_defaults(
+        func=_microkinetics_sensitivity_command
+    )
 
     run_project_parser = subparsers.add_parser(
         "run-project", help="run explicitly configured project manifest steps"
@@ -1228,6 +1250,37 @@ def _microkinetics_rates_command(args: argparse.Namespace) -> int:
         print(f"warning\t{warning}")
     print(f"Wrote microkinetic rate table to {args.out}.")
     return 0
+
+
+def _microkinetics_sensitivity_command(args: argparse.Namespace) -> int:
+    try:
+        model = load_microkinetic_model(args.model)
+        conditions = load_microkinetic_conditions(args.conditions)
+        parameters = _load_microkinetic_rate_parameters(conditions)
+        rows = microkinetic_sensitivity(
+            model,
+            parameters,
+            conditions.initial_coverages,
+            conditions.variables,
+            observable=args.observable,
+            temperature_K=conditions.temperature_K,
+            perturbation_ln=args.perturbation,
+            active_site_count=args.site_count,
+        )
+        write_sensitivity_csv(rows, args.out)
+    except (OSError, ValueError, KeyError, SciPyUnavailableError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("parameter_id\tobservable\tsensitivity\twarnings")
+    for row in rows:
+        sensitivity = "" if row.sensitivity is None else f"{row.sensitivity:.12g}"
+        print(
+            f"{row.parameter_id}\t{row.observable}\t{sensitivity}\t"
+            f"{';'.join(row.warnings)}"
+        )
+    print(f"Wrote microkinetic sensitivity table to {args.out}.")
+    return 0 if all(row.baseline_converged for row in rows) else 1
 
 
 def _load_microkinetic_rate_parameters(conditions):
