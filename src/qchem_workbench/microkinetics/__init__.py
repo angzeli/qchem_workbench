@@ -24,6 +24,13 @@ from qchem_workbench.microkinetics.parameters import (
     load_rate_parameter_set,
     rate_parameter_set_from_mapping,
 )
+from qchem_workbench.microkinetics.plotting import (
+    plot_rates_csv,
+    plot_sensitivity_csv,
+    plot_steady_state_csv,
+    plot_trajectory_csv,
+    plot_uncertainty_csv,
+)
 from qchem_workbench.microkinetics.rates import (
     MicrokineticRateAnalysis,
     RateEvaluator,
@@ -100,6 +107,11 @@ __all__ = [
     "load_rate_parameter_set",
     "load_parameter_distributions",
     "parameter_distributions_from_mapping",
+    "plot_rates_csv",
+    "plot_sensitivity_csv",
+    "plot_steady_state_csv",
+    "plot_trajectory_csv",
+    "plot_uncertainty_csv",
     "rate_parameter_set_from_mapping",
     "sample_rate_parameter_sets",
     "simulate_coverages",

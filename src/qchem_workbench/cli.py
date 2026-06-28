@@ -88,6 +88,13 @@ from qchem_workbench.microkinetics.parameters import (
     load_rate_parameter_set,
     rate_parameter_set_from_mapping,
 )
+from qchem_workbench.microkinetics.plotting import (
+    plot_rates_csv as plot_microkinetic_rates_csv,
+    plot_sensitivity_csv as plot_microkinetic_sensitivity_csv,
+    plot_steady_state_csv as plot_microkinetic_steady_state_csv,
+    plot_trajectory_csv as plot_microkinetic_trajectory_csv,
+    plot_uncertainty_csv as plot_microkinetic_uncertainty_csv,
+)
 from qchem_workbench.microkinetics.rates import (
     microkinetic_rate_analysis,
     write_rate_analysis_csv,
@@ -542,6 +549,49 @@ def build_parser() -> argparse.ArgumentParser:
     microkinetics_sample_parser.add_argument("--site-count", type=float)
     microkinetics_sample_parser.add_argument("--out", required=True, type=Path)
     microkinetics_sample_parser.set_defaults(func=_microkinetics_sample_command)
+    microkinetics_plot_trajectory_parser = microkinetics_subparsers.add_parser(
+        "plot-trajectory",
+        help="plot coverage versus time from a trajectory CSV",
+    )
+    microkinetics_plot_trajectory_parser.add_argument("trajectory", type=Path)
+    microkinetics_plot_trajectory_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_plot_trajectory_parser.set_defaults(
+        func=_microkinetics_plot_trajectory_command
+    )
+    microkinetics_plot_steady_parser = microkinetics_subparsers.add_parser(
+        "plot-steady-state",
+        help="plot steady-state coverages from a steady-state CSV",
+    )
+    microkinetics_plot_steady_parser.add_argument("steady_state", type=Path)
+    microkinetics_plot_steady_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_plot_steady_parser.set_defaults(
+        func=_microkinetics_plot_steady_state_command
+    )
+    microkinetics_plot_rates_parser = microkinetics_subparsers.add_parser(
+        "plot-rates",
+        help="plot species production rates from a rate CSV",
+    )
+    microkinetics_plot_rates_parser.add_argument("rates", type=Path)
+    microkinetics_plot_rates_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_plot_rates_parser.set_defaults(func=_microkinetics_plot_rates_command)
+    microkinetics_plot_sensitivity_parser = microkinetics_subparsers.add_parser(
+        "plot-sensitivity",
+        help="plot finite-difference sensitivity rows",
+    )
+    microkinetics_plot_sensitivity_parser.add_argument("sensitivity", type=Path)
+    microkinetics_plot_sensitivity_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_plot_sensitivity_parser.set_defaults(
+        func=_microkinetics_plot_sensitivity_command
+    )
+    microkinetics_plot_uncertainty_parser = microkinetics_subparsers.add_parser(
+        "plot-uncertainty",
+        help="plot uncertainty summary intervals when present",
+    )
+    microkinetics_plot_uncertainty_parser.add_argument("uncertainty", type=Path)
+    microkinetics_plot_uncertainty_parser.add_argument("--out", required=True, type=Path)
+    microkinetics_plot_uncertainty_parser.set_defaults(
+        func=_microkinetics_plot_uncertainty_command
+    )
 
     run_project_parser = subparsers.add_parser(
         "run-project", help="run explicitly configured project manifest steps"
@@ -1338,6 +1388,56 @@ def _microkinetics_sample_command(args: argparse.Namespace) -> int:
     )
     print(f"Wrote microkinetic uncertainty summary to {args.out}.")
     return 0 if summary.failure_count == 0 else 1
+
+
+def _microkinetics_plot_trajectory_command(args: argparse.Namespace) -> int:
+    try:
+        plot_microkinetic_trajectory_csv(args.trajectory, args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wrote microkinetic trajectory plot to {args.out}.")
+    return 0
+
+
+def _microkinetics_plot_steady_state_command(args: argparse.Namespace) -> int:
+    try:
+        plot_microkinetic_steady_state_csv(args.steady_state, args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wrote microkinetic steady-state plot to {args.out}.")
+    return 0
+
+
+def _microkinetics_plot_rates_command(args: argparse.Namespace) -> int:
+    try:
+        plot_microkinetic_rates_csv(args.rates, args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wrote microkinetic rate plot to {args.out}.")
+    return 0
+
+
+def _microkinetics_plot_sensitivity_command(args: argparse.Namespace) -> int:
+    try:
+        plot_microkinetic_sensitivity_csv(args.sensitivity, args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wrote microkinetic sensitivity plot to {args.out}.")
+    return 0
+
+
+def _microkinetics_plot_uncertainty_command(args: argparse.Namespace) -> int:
+    try:
+        plot_microkinetic_uncertainty_csv(args.uncertainty, args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wrote microkinetic uncertainty plot to {args.out}.")
+    return 0
 
 
 def _load_microkinetic_rate_parameters(conditions):
