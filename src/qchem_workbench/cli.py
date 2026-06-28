@@ -207,6 +207,12 @@ def build_parser() -> argparse.ArgumentParser:
     render_qe_parser.add_argument("--k-points", nargs=3, type=int, default=(1, 1, 1))
     render_qe_parser.add_argument("--k-shift", nargs=3, type=int, default=(0, 0, 0))
     render_qe_parser.add_argument(
+        "--atomic-positions",
+        choices=("angstrom", "crystal"),
+        default="angstrom",
+        help="ATOMIC_POSITIONS coordinate units to render",
+    )
+    render_qe_parser.add_argument(
         "--gamma-only",
         action="store_true",
         help="render K_POINTS gamma instead of automatic k-point grid",
@@ -604,6 +610,7 @@ def _render_qe_command(args: argparse.Namespace) -> int:
             k_points=k_points,
             pseudopotentials=pseudopotentials,
             atomic_masses=atomic_masses,
+            atomic_position_units=args.atomic_positions,
         )
         rendered = render_qe_pw_input(structure, spec)
         args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -1159,6 +1166,9 @@ def _structure_with_cli_cell(
         atoms=structure.atoms,
         cell=cell,
         pbc=pbc,
+        fractional_coordinates=structure.fractional_coordinates,
+        surface_normal=structure.surface_normal,
+        fixed_atom_indices=structure.fixed_atom_indices,
         charge=structure.charge,
         multiplicity=structure.multiplicity,
         metadata=structure.metadata,

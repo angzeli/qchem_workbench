@@ -9,9 +9,11 @@ from qchem_workbench.core.structure import AtomisticStructure
 
 
 QENamelistSettings = dict[str, dict[str, Any]]
-QEKPointMode = Literal["automatic", "gamma"]
-QE_CELL_CALCULATIONS = {"vc-relax", "vc-md"}
-QE_IONS_CALCULATIONS = {"relax", "md", "vc-relax", "vc-md"}
+QEKPointMode = Literal["automatic", "gamma", "crystal"]
+QE_ATOMIC_POSITION_UNITS = {"angstrom", "crystal"}
+QE_CALCULATION_TYPES = {"scf", "relax", "vc-relax"}
+QE_CELL_CALCULATIONS = {"vc-relax"}
+QE_IONS_CALCULATIONS = {"relax", "vc-relax"}
 
 
 @dataclass(frozen=True)
@@ -19,13 +21,22 @@ class QEKPoints:
     mode: QEKPointMode = "automatic"
     grid: tuple[int, int, int] | None = (1, 1, 1)
     shift: tuple[int, int, int] = (0, 0, 0)
+    points: tuple[tuple[float, float, float, float], ...] | None = None
 
     def __post_init__(self) -> None:
-        if self.mode not in {"automatic", "gamma"}:
+        if self.mode not in {"automatic", "gamma", "crystal"}:
             raise ValueError(f"unsupported QE K_POINTS mode {self.mode!r}")
         if self.mode == "gamma":
             object.__setattr__(self, "grid", None)
             object.__setattr__(self, "shift", (0, 0, 0))
+            object.__setattr__(self, "points", None)
+            return
+        if self.mode == "crystal":
+            if not self.points:
+                raise ValueError("crystal QE K_POINTS requires explicit points")
+            object.__setattr__(self, "grid", None)
+            object.__setattr__(self, "shift", (0, 0, 0))
+            object.__setattr__(self, "points", _kpoint_rows(self.points))
             return
         if self.grid is None:
             raise ValueError("automatic QE K_POINTS requires a grid")
@@ -34,10 +45,21 @@ class QEKPoints:
         if any(value not in {0, 1} for value in shift):
             raise ValueError("QE k-point shifts must be 0 or 1")
         object.__setattr__(self, "shift", shift)
+        object.__setattr__(self, "points", None)
 
     def to_lines(self) -> list[str]:
         if self.mode == "gamma":
             return ["K_POINTS gamma"]
+        if self.mode == "crystal":
+            assert self.points is not None
+            return [
+                "K_POINTS crystal",
+                str(len(self.points)),
+                *[
+                    " ".join(_format_number(value) for value in point)
+                    for point in self.points
+                ],
+            ]
         assert self.grid is not None
         values = (*self.grid, *self.shift)
         return ["K_POINTS automatic", " ".join(str(value) for value in values)]
@@ -57,11 +79,19 @@ class QEInputSpec:
     k_points: QEKPoints = field(default_factory=QEKPoints)
     pseudopotentials: dict[str, str] = field(default_factory=dict)
     atomic_masses: dict[str, float] = field(default_factory=dict)
+    atomic_position_units: Literal["angstrom", "crystal"] = "angstrom"
     additional_settings: QENamelistSettings = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not self.calculation.strip():
+        calculation = self.calculation.strip()
+        if not calculation:
             raise ValueError("QE calculation type cannot be empty")
+        if calculation not in QE_CALCULATION_TYPES:
+            allowed = ", ".join(sorted(QE_CALCULATION_TYPES))
+            raise ValueError(
+                f"unsupported QE calculation type {calculation!r}; "
+                f"expected one of: {allowed}"
+            )
         if not self.prefix.strip():
             raise ValueError("QE prefix cannot be empty")
         if not self.pseudo_dir.strip():
@@ -76,7 +106,12 @@ class QEInputSpec:
             raise ValueError("QE degauss must be nonnegative")
         if not self.pseudopotentials:
             raise ValueError("QE pseudopotential mapping is required")
+        if self.atomic_position_units not in QE_ATOMIC_POSITION_UNITS:
+            raise ValueError(
+                "QE atomic_position_units must be 'angstrom' or 'crystal'"
+            )
 
+        object.__setattr__(self, "calculation", calculation)
         object.__setattr__(
             self,
             "pseudopotentials",
@@ -107,7 +142,7 @@ def render_qe_pw_input(structure: AtomisticStructure, spec: QEInputSpec) -> str:
 
     lines.extend(_atomic_species_lines(elements, spec))
     lines.append("")
-    lines.extend(_atomic_positions_lines(structure))
+    lines.extend(_atomic_positions_lines(structure, spec))
     lines.append("")
     lines.extend(_cell_parameter_lines(structure))
     lines.append("")
@@ -191,12 +226,21 @@ def _atomic_species_lines(elements: set[str], spec: QEInputSpec) -> list[str]:
     return lines
 
 
-def _atomic_positions_lines(structure: AtomisticStructure) -> list[str]:
-    lines = ["ATOMIC_POSITIONS angstrom"]
-    for atom in structure.atoms:
+def _atomic_positions_lines(
+    structure: AtomisticStructure,
+    spec: QEInputSpec,
+) -> list[str]:
+    lines = [f"ATOMIC_POSITIONS {spec.atomic_position_units}"]
+    if spec.atomic_position_units == "crystal":
+        positions = structure.atoms_as_fractional()
+    else:
+        positions = tuple((atom.x, atom.y, atom.z) for atom in structure.atoms)
+    for index, (atom, position) in enumerate(zip(structure.atoms, positions)):
+        constraints = _qe_constraint_flags(index, structure.fixed_atom_indices)
         lines.append(
-            f"{atom.symbol} {_format_number(atom.x)} "
-            f"{_format_number(atom.y)} {_format_number(atom.z)}"
+            f"{atom.symbol} {_format_number(position[0])} "
+            f"{_format_number(position[1])} {_format_number(position[2])}"
+            f"{constraints}"
         )
     return lines
 
@@ -231,6 +275,25 @@ def _int3(value: tuple[int, int, int], label: str) -> tuple[int, int, int]:
     if any(item <= 0 for item in parsed[:3]) and label == "k-point grid":
         raise ValueError("QE k-point grid values must be positive")
     return parsed
+
+
+def _kpoint_rows(
+    value: tuple[tuple[float, float, float, float], ...],
+) -> tuple[tuple[float, float, float, float], ...]:
+    rows: list[tuple[float, float, float, float]] = []
+    for row in value:
+        if not isinstance(row, (list, tuple)) or len(row) != 4:
+            raise ValueError("crystal QE K_POINTS rows must contain kx, ky, kz, weight")
+        rows.append(tuple(float(component) for component in row))
+    return tuple(rows)
+
+
+def _qe_constraint_flags(index: int, fixed_atom_indices: tuple[int, ...]) -> str:
+    if not fixed_atom_indices:
+        return ""
+    if index in fixed_atom_indices:
+        return " 0 0 0"
+    return " 1 1 1"
 
 
 def _atomic_masses(value: dict[str, float]) -> dict[str, float]:

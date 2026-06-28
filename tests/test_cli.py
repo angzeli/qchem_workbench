@@ -452,6 +452,45 @@ def test_render_qe_options_appear_in_output(tmp_path):
     assert "K_POINTS automatic\n2 2 1 0 0 0\n" in rendered
 
 
+def test_render_qe_crystal_atomic_positions_option(tmp_path):
+    structure_path = tmp_path / "cu.xyz"
+    structure_path.write_text(
+        "1\nsynthetic fixture copper cell\nCu 1.8 1.8 0\n",
+        encoding="utf-8",
+    )
+    pseudo_map = tmp_path / "pseudos.yaml"
+    pseudo_map.write_text(
+        "Cu:\n"
+        "  pseudo: Cu.pbe.UPF\n"
+        "  mass: 63.546\n",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "cu.in"
+
+    exit_code = main(
+        [
+            "render-qe",
+            str(structure_path),
+            "--pseudo-map",
+            str(pseudo_map),
+            "--out",
+            str(out_path),
+            "--ecutwfc",
+            "40",
+            "--cell",
+            "3.6",
+            "3.6",
+            "10",
+            "--atomic-positions",
+            "crystal",
+        ]
+    )
+
+    rendered = out_path.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "ATOMIC_POSITIONS crystal\nCu 0.5 0.5 0\n" in rendered
+
+
 def test_init_refuses_to_overwrite_without_force(tmp_path):
     project_path = tmp_path / "demo"
     assert main(["init", str(project_path), "--template", "blank"]) == 0

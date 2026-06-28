@@ -64,6 +64,33 @@ def test_gamma_k_point_formatting():
     assert QEKPoints(mode="gamma").to_lines() == ["K_POINTS gamma"]
 
 
+def test_explicit_crystal_k_point_formatting():
+    k_points = QEKPoints(
+        mode="crystal",
+        points=((0.0, 0.0, 0.0, 1.0), (0.5, 0.0, 0.0, 0.5)),
+    )
+
+    assert k_points.to_lines() == [
+        "K_POINTS crystal",
+        "2",
+        "0 0 0 1",
+        "0.5 0 0 0.5",
+    ]
+
+
+def test_unsupported_calculation_type_is_error():
+    with pytest.raises(ValueError, match="unsupported QE calculation"):
+        QEInputSpec(
+            calculation="bands",
+            prefix="demo",
+            pseudo_dir="pseudos",
+            outdir="tmp",
+            ecutwfc=40.0,
+            pseudopotentials={"H": "H.UPF"},
+            atomic_masses={"H": 1.008},
+        )
+
+
 def test_additional_settings_are_preserved():
     spec = QEInputSpec(
         calculation="relax",
@@ -139,6 +166,72 @@ def test_render_qe_pw_input_for_periodic_cell():
     assert "&CELL\n/\n" in rendered
     assert "  ecutrho = 320," in rendered
     assert "K_POINTS automatic\n4 4 4 0 0 0\n" in rendered
+
+
+def test_render_relax_includes_ions_without_cell_namelist():
+    structure = AtomisticStructure(
+        atoms=(Atom("Cu", 0.0, 0.0, 0.0),),
+        cell=((3.6, 0.0, 0.0), (0.0, 3.6, 0.0), (0.0, 0.0, 12.0)),
+        pbc=(True, True, False),
+    )
+    spec = QEInputSpec(
+        calculation="relax",
+        prefix="cu",
+        pseudo_dir="./pseudos",
+        outdir="./tmp",
+        ecutwfc=40.0,
+        pseudopotentials={"Cu": "Cu.pbe.UPF"},
+        atomic_masses={"Cu": 63.546},
+    )
+
+    rendered = render_qe_pw_input(structure, spec)
+
+    assert "&IONS\n/\n" in rendered
+    assert "&CELL\n" not in rendered
+
+
+def test_render_fixed_atom_constraints():
+    structure = AtomisticStructure(
+        atoms=(Atom("Cu", 0.0, 0.0, 0.0), Atom("Cu", 0.0, 0.0, 2.0)),
+        cell=((3.6, 0.0, 0.0), (0.0, 3.6, 0.0), (0.0, 0.0, 12.0)),
+        pbc=(True, True, False),
+        fixed_atom_indices=(0,),
+    )
+    spec = QEInputSpec(
+        calculation="relax",
+        prefix="cu",
+        pseudo_dir="./pseudos",
+        outdir="./tmp",
+        ecutwfc=40.0,
+        pseudopotentials={"Cu": "Cu.pbe.UPF"},
+        atomic_masses={"Cu": 63.546},
+    )
+
+    rendered = render_qe_pw_input(structure, spec)
+
+    assert "ATOMIC_POSITIONS angstrom\nCu 0 0 0 0 0 0\nCu 0 0 2 1 1 1\n" in rendered
+
+
+def test_render_crystal_atomic_positions():
+    structure = AtomisticStructure.from_fractional_coordinates(
+        ("Cu",),
+        ((0.25, 0.5, 0.75),),
+        cell=((4.0, 0.0, 0.0), (0.0, 4.0, 0.0), (0.0, 0.0, 4.0)),
+    )
+    spec = QEInputSpec(
+        calculation="scf",
+        prefix="cu",
+        pseudo_dir="./pseudos",
+        outdir="./tmp",
+        ecutwfc=40.0,
+        atomic_position_units="crystal",
+        pseudopotentials={"Cu": "Cu.pbe.UPF"},
+        atomic_masses={"Cu": 63.546},
+    )
+
+    rendered = render_qe_pw_input(structure, spec)
+
+    assert "ATOMIC_POSITIONS crystal\nCu 0.25 0.5 0.75\n" in rendered
 
 
 def test_render_qe_pw_input_missing_pseudopotential_error():
