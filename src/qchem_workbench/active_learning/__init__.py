@@ -43,6 +43,10 @@ from qchem_workbench.active_learning.proposals import (
     proposal_todo_manifest,
     write_proposal_todo_manifest,
 )
+from qchem_workbench.active_learning.report import (
+    generate_active_learning_report,
+    write_active_learning_report,
+)
 from qchem_workbench.active_learning.state import (
     ACTIVE_LEARNING_STATE_SCHEMA_VERSION,
     CampaignState,
@@ -97,6 +101,7 @@ __all__ = [
     "score_dataset_rows",
     "export_bo_forge_interchange",
     "from_bo_forge_proposals",
+    "generate_active_learning_report",
     "import_proposed_candidates_csv",
     "mark_candidate_state",
     "proposal_todo_manifest",
@@ -106,6 +111,7 @@ __all__ = [
     "to_bo_forge_dataset",
     "validate_objective_columns",
     "write_descriptor_dataset_csv",
+    "write_active_learning_report",
     "write_proposal_todo_manifest",
     "write_scored_dataset_csv",
 ]

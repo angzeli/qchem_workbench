@@ -22,6 +22,7 @@ from qchem_workbench.active_learning.proposals import (
     import_proposed_candidates_csv,
     write_proposal_todo_manifest,
 )
+from qchem_workbench.active_learning.report import write_active_learning_report
 from qchem_workbench.active_learning.objectives import load_objective_spec
 from qchem_workbench.active_learning.scoring import (
     score_dataset_rows,
@@ -579,6 +580,17 @@ def build_parser() -> argparse.ArgumentParser:
             func=_active_learning_state_mark_command,
             target_state=target_state,
         )
+    active_learning_report_parser = active_learning_subparsers.add_parser(
+        "report",
+        help="generate an active-learning loop Markdown report",
+    )
+    active_learning_report_parser.add_argument("campaign", type=Path)
+    active_learning_report_parser.add_argument("state_file", type=Path)
+    active_learning_report_parser.add_argument("dataset", type=Path)
+    active_learning_report_parser.add_argument("--out", required=True, type=Path)
+    active_learning_report_parser.add_argument("--objectives", type=Path)
+    active_learning_report_parser.add_argument("--proposals", type=Path)
+    active_learning_report_parser.set_defaults(func=_active_learning_report_command)
 
     microkinetics_parser = subparsers.add_parser(
         "microkinetics",
@@ -1412,6 +1424,36 @@ def _active_learning_state_mark_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Marked {args.candidate_id} as {args.target_state}.")
+    return 0
+
+
+def _active_learning_report_command(args: argparse.Namespace) -> int:
+    try:
+        campaign = load_active_learning_campaign(args.campaign)
+        state = load_campaign_state(args.state_file)
+        rows, headers = _read_dict_csv(args.dataset)
+        objective_spec = (
+            load_objective_spec(args.objectives) if args.objectives is not None else None
+        )
+        proposals = (
+            import_proposed_candidates_csv(campaign, args.proposals).proposals
+            if args.proposals is not None
+            else ()
+        )
+        write_active_learning_report(
+            args.out,
+            campaign,
+            state,
+            rows,
+            headers,
+            objective_spec=objective_spec,
+            proposals=proposals,
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote active-learning report to {args.out}.")
     return 0
 
 
