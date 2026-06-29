@@ -31,6 +31,11 @@ from qchem_workbench.active_learning.bo_forge import (
     BOForgeExportSummary,
     export_bo_forge_interchange,
 )
+from qchem_workbench.active_learning.bo_forge_adapter import (
+    BOForgeUnavailableError,
+    from_bo_forge_proposals,
+    to_bo_forge_dataset,
+)
 from qchem_workbench.active_learning.proposals import (
     ProposalImportSummary,
     ProposedCandidate,
@@ -68,6 +73,7 @@ __all__ = [
     "ObjectiveSpec",
     "ScoredDataset",
     "BOForgeExportSummary",
+    "BOForgeUnavailableError",
     "ProposalImportSummary",
     "ProposedCandidate",
     "load_candidate_registry",
@@ -76,8 +82,10 @@ __all__ = [
     "build_active_learning_dataset",
     "score_dataset_rows",
     "export_bo_forge_interchange",
+    "from_bo_forge_proposals",
     "import_proposed_candidates_csv",
     "proposal_todo_manifest",
+    "to_bo_forge_dataset",
     "validate_objective_columns",
     "write_descriptor_dataset_csv",
     "write_proposal_todo_manifest",

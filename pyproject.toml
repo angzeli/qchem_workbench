@@ -22,6 +22,9 @@ dependencies = [
 ase = [
   "ase>=3.22",
 ]
+bo-forge = [
+  "bo-forge>=0",
+]
 dev = [
   "pytest",
   "ruff",
