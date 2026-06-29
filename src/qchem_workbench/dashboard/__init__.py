@@ -7,11 +7,21 @@ from qchem_workbench.dashboard.app import (
     render_dashboard,
     run_dashboard,
 )
+from qchem_workbench.dashboard.data import (
+    DashboardData,
+    DashboardFileProvenance,
+    DashboardSection,
+    load_dashboard_data,
+)
 
 __all__ = [
     "DashboardConfig",
+    "DashboardData",
+    "DashboardFileProvenance",
+    "DashboardSection",
     "MissingStreamlitError",
     "load_dashboard_config",
+    "load_dashboard_data",
     "render_dashboard",
     "run_dashboard",
 ]

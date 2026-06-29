@@ -11,6 +11,9 @@ from qchem_workbench.dashboard.app import (
     load_dashboard_config,
     render_dashboard,
 )
+from qchem_workbench.dashboard.data import load_dashboard_data
+from qchem_workbench.core.result import CalculationResult
+from qchem_workbench.results.store import save_result_collection
 
 
 def test_dashboard_config_loads_project_manifest(tmp_path):
@@ -76,6 +79,77 @@ def test_dashboard_module_imports_when_streamlit_is_available():
     import qchem_workbench.dashboard.app as app
 
     assert app._import_streamlit() is not None
+
+
+def test_dashboard_data_loads_minimal_project(tmp_path):
+    manifest_path = _write_project(tmp_path)
+
+    data = load_dashboard_data(project=manifest_path)
+
+    assert data.project_name == "dashboard demo"
+    assert data.section("species") is not None
+    assert data.missing_sections == ("results[1]",)
+
+
+def test_dashboard_data_loads_project_results(tmp_path):
+    manifest_path = _write_project(tmp_path)
+    result_path = tmp_path / "results" / "results.json"
+    save_result_collection(
+        result_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="B3LYP",
+                basis="def2-SVP",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-76.0,
+            )
+        ],
+    )
+
+    data = load_dashboard_data(project=manifest_path)
+    results = data.section("results[1]")
+
+    assert results is not None
+    assert results.metadata["count"] == 1
+    assert results.rows[0]["species_name"] == "water"
+
+
+def test_dashboard_data_missing_optional_file_is_not_fatal(tmp_path):
+    missing = tmp_path / "missing_reaction_table.csv"
+
+    data = load_dashboard_data(results=(), pathway_tables=(missing,))
+
+    assert data.section("pathway_table[1]") is None
+    assert data.missing_sections == ("pathway_table[1]",)
+    assert data.file_provenance[0].status == "missing"
+
+
+def test_dashboard_data_malformed_result_file_warns(tmp_path):
+    malformed = tmp_path / "results.json"
+    malformed.write_text("{not json", encoding="utf-8")
+
+    data = load_dashboard_data(results=(malformed,))
+
+    assert data.section("results[1]") is None
+    assert data.warnings
+    assert "result store could not be loaded" in data.warnings[0]
+
+
+def test_dashboard_data_loads_active_learning_state(tmp_path):
+    state_path = tmp_path / "campaign_state.json"
+    state_path.write_text(
+        '{"schema_version": 1, "candidates": {"cand_001": {"state": "pending"}}, "audit_log": []}\n',
+        encoding="utf-8",
+    )
+
+    data = load_dashboard_data(results=(), active_learning_state=state_path)
+    section = data.section("active_learning_state")
+
+    assert section is not None
+    assert {"state": "pending", "count": 1} in section.rows
 
 
 class _FakeStreamlit:
