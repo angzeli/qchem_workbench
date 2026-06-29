@@ -18,6 +18,10 @@ from qchem_workbench.active_learning.datasets import (
     write_descriptor_dataset_csv,
 )
 from qchem_workbench.active_learning.bo_forge import export_bo_forge_interchange
+from qchem_workbench.active_learning.proposals import (
+    import_proposed_candidates_csv,
+    write_proposal_todo_manifest,
+)
 from qchem_workbench.active_learning.objectives import load_objective_spec
 from qchem_workbench.active_learning.scoring import (
     score_dataset_rows,
@@ -529,6 +533,14 @@ def build_parser() -> argparse.ArgumentParser:
     active_learning_export_parser.add_argument("dataset", type=Path)
     active_learning_export_parser.add_argument("--out", required=True, type=Path)
     active_learning_export_parser.set_defaults(func=_active_learning_export_bo_forge_command)
+    active_learning_import_parser = active_learning_subparsers.add_parser(
+        "import-proposals",
+        help="validate proposed candidates and write calculation TODOs",
+    )
+    active_learning_import_parser.add_argument("campaign", type=Path)
+    active_learning_import_parser.add_argument("proposals", type=Path)
+    active_learning_import_parser.add_argument("--out", required=True, type=Path)
+    active_learning_import_parser.set_defaults(func=_active_learning_import_proposals_command)
 
     microkinetics_parser = subparsers.add_parser(
         "microkinetics",
@@ -1316,6 +1328,20 @@ def _active_learning_export_bo_forge_command(args: argparse.Namespace) -> int:
     print(f"observations\t{summary.observation_count}")
     for warning in summary.warnings:
         print(f"warning\t{warning}")
+    return 0
+
+
+def _active_learning_import_proposals_command(args: argparse.Namespace) -> int:
+    try:
+        campaign = load_active_learning_campaign(args.campaign)
+        summary = import_proposed_candidates_csv(campaign, args.proposals)
+        write_proposal_todo_manifest(args.out, summary.todo_manifest)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Imported {len(summary.proposals)} proposed candidate(s).")
+    print(f"Wrote calculation TODO manifest to {args.out}.")
     return 0
 
 

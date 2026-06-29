@@ -31,6 +31,13 @@ from qchem_workbench.active_learning.bo_forge import (
     BOForgeExportSummary,
     export_bo_forge_interchange,
 )
+from qchem_workbench.active_learning.proposals import (
+    ProposalImportSummary,
+    ProposedCandidate,
+    import_proposed_candidates_csv,
+    proposal_todo_manifest,
+    write_proposal_todo_manifest,
+)
 from qchem_workbench.active_learning.datasets import (
     ACTIVE_LEARNING_DATASET_SCHEMA_VERSION,
     DESCRIPTOR_SOURCE_TYPES,
@@ -61,13 +68,18 @@ __all__ = [
     "ObjectiveSpec",
     "ScoredDataset",
     "BOForgeExportSummary",
+    "ProposalImportSummary",
+    "ProposedCandidate",
     "load_candidate_registry",
     "load_active_learning_campaign",
     "load_objective_spec",
     "build_active_learning_dataset",
     "score_dataset_rows",
     "export_bo_forge_interchange",
+    "import_proposed_candidates_csv",
+    "proposal_todo_manifest",
     "validate_objective_columns",
     "write_descriptor_dataset_csv",
+    "write_proposal_todo_manifest",
     "write_scored_dataset_csv",
 ]
