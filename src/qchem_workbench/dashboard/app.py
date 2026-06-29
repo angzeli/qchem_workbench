@@ -6,6 +6,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from qchem_workbench.dashboard.data import DashboardData, load_dashboard_data
+from qchem_workbench.dashboard.overview import (
+    backend_method_basis_rows,
+    loaded_file_rows,
+    missing_data_rows,
+    overview_summary_rows,
+)
+from qchem_workbench.dashboard.quality import (
+    failed_calculation_rows,
+    quality_check_rows,
+    quality_summary_rows,
+)
 from qchem_workbench.projects.manifest import ProjectManifest, load_project_manifest
 
 
@@ -87,10 +99,16 @@ def run_dashboard(
 
     streamlit = _import_streamlit()
     config = load_dashboard_config(project=project, results=results)
-    render_dashboard(streamlit, config)
+    data = load_dashboard_data(project=project, results=results)
+    render_dashboard(streamlit, config, data=data)
 
 
-def render_dashboard(st: Any, config: DashboardConfig) -> None:
+def render_dashboard(
+    st: Any,
+    config: DashboardConfig,
+    *,
+    data: DashboardData | None = None,
+) -> None:
     """Render the initial read-only dashboard page with a Streamlit-like object."""
 
     st.set_page_config(page_title="qchem-workbench dashboard", layout="wide")
@@ -113,6 +131,28 @@ def render_dashboard(st: Any, config: DashboardConfig) -> None:
     if config.warnings:
         st.subheader("Warnings")
         st.table([{"warning": warning} for warning in config.warnings])
+    if data is not None:
+        st.header("Overview")
+        st.table(overview_summary_rows(data))
+        st.subheader("Loaded files")
+        st.table(loaded_file_rows(data))
+        st.subheader("Backend / method / basis summary")
+        st.table(backend_method_basis_rows(data))
+        missing_rows = missing_data_rows(data)
+        if missing_rows:
+            st.subheader("Missing data summary")
+            st.table(missing_rows)
+
+        st.header("Quality")
+        st.table(quality_summary_rows(data))
+        check_rows = quality_check_rows(data)
+        if check_rows:
+            st.subheader("Quality checks")
+            st.table(check_rows)
+        failed_rows = failed_calculation_rows(data)
+        if failed_rows:
+            st.subheader("Failed calculations")
+            st.table(failed_rows)
 
 
 def _import_streamlit() -> Any:

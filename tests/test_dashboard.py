@@ -12,6 +12,16 @@ from qchem_workbench.dashboard.app import (
     render_dashboard,
 )
 from qchem_workbench.dashboard.data import load_dashboard_data
+from qchem_workbench.dashboard.overview import (
+    backend_method_basis_rows,
+    missing_data_rows,
+    overview_summary_rows,
+)
+from qchem_workbench.dashboard.quality import (
+    failed_calculation_rows,
+    quality_check_rows,
+    quality_summary_rows,
+)
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.results.store import save_result_collection
 
@@ -152,6 +162,59 @@ def test_dashboard_data_loads_active_learning_state(tmp_path):
     assert {"state": "pending", "count": 1} in section.rows
 
 
+def test_dashboard_overview_rows_include_counts(tmp_path):
+    data = _dashboard_data_with_results(tmp_path)
+
+    rows = overview_summary_rows(data)
+    backend_rows = backend_method_basis_rows(data)
+
+    assert {"item": "Result count", "value": 2} in rows
+    assert backend_rows[0]["backend"] == "gaussian"
+    assert backend_rows[0]["count"] == 2
+
+
+def test_dashboard_missing_data_rows_include_warnings(tmp_path):
+    malformed = tmp_path / "results.json"
+    malformed.write_text("{not json", encoding="utf-8")
+    data = load_dashboard_data(results=(malformed,))
+
+    rows = missing_data_rows(data)
+
+    assert rows
+    assert "result store could not be loaded" in rows[0]["message"]
+
+
+def test_dashboard_quality_grouping_and_filters(tmp_path):
+    data = _dashboard_data_with_results(tmp_path)
+
+    summary = quality_summary_rows(data)
+    checks = quality_check_rows(data, backend="gaussian", code="unsuccessful_calculation")
+
+    assert {"severity": "error", "count": 1} in summary
+    assert len(checks) == 1
+    assert checks[0]["species"] == "failed_species"
+
+
+def test_dashboard_failed_calculation_rows(tmp_path):
+    data = _dashboard_data_with_results(tmp_path)
+
+    failed = failed_calculation_rows(data)
+
+    assert len(failed) == 1
+    assert failed[0]["species"] == "failed_species"
+
+
+def test_dashboard_render_helper_with_loaded_data(tmp_path):
+    fake = _FakeStreamlit()
+    config = DashboardConfig(project_name="demo")
+    data = _dashboard_data_with_results(tmp_path)
+
+    render_dashboard(fake, config, data=data)
+
+    assert ("header", "Overview") in fake.calls
+    assert ("header", "Quality") in fake.calls
+
+
 class _FakeStreamlit:
     def __init__(self):
         self.calls = []
@@ -164,6 +227,9 @@ class _FakeStreamlit:
 
     def caption(self, text):
         self.calls.append(("caption", text))
+
+    def header(self, text):
+        self.calls.append(("header", text))
 
     def subheader(self, text):
         self.calls.append(("subheader", text))
@@ -184,3 +250,31 @@ def _write_project(tmp_path):
         encoding="utf-8",
     )
     return manifest_path
+
+
+def _dashboard_data_with_results(tmp_path):
+    result_path = tmp_path / "results.json"
+    save_result_collection(
+        result_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="B3LYP",
+                basis="def2-SVP",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-76.0,
+            ),
+            CalculationResult(
+                species_name="failed_species",
+                backend="gaussian",
+                method="B3LYP",
+                basis="def2-SVP",
+                task="single_point",
+                success=False,
+                warnings=["Synthetic failure fixture"],
+            ),
+        ],
+    )
+    return load_dashboard_data(results=(result_path,))
