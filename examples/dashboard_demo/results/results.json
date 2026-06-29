@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "fixture": "synthetic",
+    "note": "Synthetic dashboard demo result store."
+  },
+  "results": [
+    {
+      "species_name": "water",
+      "conformer_id": null,
+      "backend": "gaussian",
+      "method": "B3LYP",
+      "basis": "def2-SVP",
+      "task": "single_point",
+      "success": true,
+      "electronic_energy_hartree": -76.0,
+      "gibbs_free_energy_hartree": null,
+      "zero_point_correction_hartree": null,
+      "thermal_correction_energy_hartree": null,
+      "thermal_correction_enthalpy_hartree": null,
+      "thermal_correction_gibbs_hartree": null,
+      "sum_electronic_zero_point_energy_hartree": null,
+      "sum_electronic_thermal_free_energy_hartree": null,
+      "homo_ev": -6.0,
+      "lumo_ev": 1.0,
+      "gap_ev": 7.0,
+      "warnings": [
+        "Synthetic dashboard fixture; not a real calculation."
+      ],
+      "metadata": {
+        "fixture": "synthetic"
+      },
+      "properties": {
+        "vibrational_modes": [],
+        "excitations": [],
+        "dipole_moment": {
+          "x_debye": null,
+          "y_debye": null,
+          "z_debye": null,
+          "total_debye": 1.8,
+          "unit": "Debye",
+          "source_backend": "gaussian",
+          "source_section_label": "Synthetic dipole"
+        },
+        "atomic_charges": [],
+        "population_analyses": [],
+        "orbital_table": null,
+        "metadata": {}
+      },
+      "source_path": "outputs/water.log"
+    }
+  ]
+}
