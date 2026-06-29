@@ -21,19 +21,37 @@ from qchem_workbench.active_learning.objectives import (
     load_objective_spec,
     validate_objective_columns,
 )
+from qchem_workbench.active_learning.datasets import (
+    ACTIVE_LEARNING_DATASET_SCHEMA_VERSION,
+    DESCRIPTOR_SOURCE_TYPES,
+    ActiveLearningCampaign,
+    DescriptorDataset,
+    DescriptorSource,
+    build_active_learning_dataset,
+    load_active_learning_campaign,
+    write_descriptor_dataset_csv,
+)
 
 __all__ = [
     "ACTIVE_LEARNING_CANDIDATE_SCHEMA_VERSION",
+    "ACTIVE_LEARNING_DATASET_SCHEMA_VERSION",
     "ACTIVE_LEARNING_OBJECTIVE_SCHEMA_VERSION",
+    "DESCRIPTOR_SOURCE_TYPES",
     "SUPPORTED_CONSTRAINT_OPERATORS",
     "SUPPORTED_CANDIDATE_TYPES",
     "SUPPORTED_OBJECTIVE_DIRECTIONS",
     "ActiveLearningCandidate",
+    "ActiveLearningCampaign",
     "CandidateRegistry",
+    "DescriptorDataset",
+    "DescriptorSource",
     "ObjectiveConstraint",
     "ObjectiveDefinition",
     "ObjectiveSpec",
     "load_candidate_registry",
+    "load_active_learning_campaign",
     "load_objective_spec",
+    "build_active_learning_dataset",
     "validate_objective_columns",
+    "write_descriptor_dataset_csv",
 ]

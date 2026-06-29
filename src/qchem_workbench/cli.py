@@ -12,6 +12,11 @@ from pathlib import Path
 import yaml
 
 from qchem_workbench import __version__
+from qchem_workbench.active_learning.datasets import (
+    build_active_learning_dataset,
+    load_active_learning_campaign,
+    write_descriptor_dataset_csv,
+)
 from qchem_workbench.analysis.adsorption import (
     AdsorptionEnergyRow,
     adsorption_electronic_energy_table,
@@ -482,6 +487,24 @@ def build_parser() -> argparse.ArgumentParser:
     rank_candidates_parser.add_argument("descriptors", type=Path)
     rank_candidates_parser.add_argument("--out", required=True, type=Path)
     rank_candidates_parser.set_defaults(func=_rank_candidates_command)
+
+    active_learning_parser = subparsers.add_parser(
+        "active-learning",
+        help="file-based active-learning and BO handoff helpers",
+    )
+    active_learning_subparsers = active_learning_parser.add_subparsers(
+        dest="active_learning_command",
+        required=True,
+    )
+    active_learning_dataset_parser = active_learning_subparsers.add_parser(
+        "build-dataset",
+        help="build a transparent active-learning descriptor dataset",
+    )
+    active_learning_dataset_parser.add_argument("campaign", type=Path)
+    active_learning_dataset_parser.add_argument("--out", required=True, type=Path)
+    active_learning_dataset_parser.set_defaults(
+        func=_active_learning_build_dataset_command
+    )
 
     microkinetics_parser = subparsers.add_parser(
         "microkinetics",
@@ -1221,6 +1244,22 @@ def _rank_candidates_command(args: argparse.Namespace) -> int:
     if excluded_count:
         print(f"Excluded candidates\t{excluded_count}")
     print(f"Wrote ranked candidates to {args.out}.")
+    return 0
+
+
+def _active_learning_build_dataset_command(args: argparse.Namespace) -> int:
+    try:
+        campaign = load_active_learning_campaign(args.campaign)
+        dataset = build_active_learning_dataset(campaign)
+        write_descriptor_dataset_csv(dataset, args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Wrote active-learning dataset with {len(dataset.rows)} candidate(s) "
+        f"and {len(dataset.headers)} column(s) to {args.out}."
+    )
     return 0
 
 
