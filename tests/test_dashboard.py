@@ -27,6 +27,14 @@ from qchem_workbench.dashboard.quality import (
     quality_check_rows,
     quality_summary_rows,
 )
+from qchem_workbench.dashboard.workflows import (
+    adsorption_energy_rows,
+    che_correction_display_rows,
+    che_energy_rows,
+    incomplete_analysis_rows,
+    method_consistency_warnings,
+    reaction_energy_rows,
+)
 from qchem_workbench.core.properties import (
     AtomicCharge,
     CalculationProperties,
@@ -256,6 +264,78 @@ def test_dashboard_molecular_property_unknown_type_is_error(tmp_path):
         molecular_property_rows(data, "redox_potentials")
 
 
+def test_dashboard_reaction_table_helpers(tmp_path):
+    reaction_path = tmp_path / "reaction_table.csv"
+    _write_csv(
+        reaction_path,
+        ["reaction_id", "complete", "delta_ev", "backend", "method", "basis"],
+        [
+            {
+                "reaction_id": "r1",
+                "complete": "True",
+                "delta_ev": "0.1",
+                "backend": "gaussian",
+                "method": "B3LYP",
+                "basis": "def2-SVP",
+            },
+            {
+                "reaction_id": "r2",
+                "complete": "False",
+                "delta_ev": "",
+                "backend": "orca",
+                "method": "PBE0",
+                "basis": "def2-SVP",
+            },
+        ],
+    )
+    data = load_dashboard_data(pathway_tables=(reaction_path,))
+    rows = reaction_energy_rows(data)
+
+    assert len(rows) == 2
+    assert incomplete_analysis_rows(rows)[0]["reaction_id"] == "r2"
+    assert method_consistency_warnings(rows, label="reaction")
+
+
+def test_dashboard_adsorption_table_helpers(tmp_path):
+    adsorption_path = tmp_path / "adsorption_table.csv"
+    _write_csv(
+        adsorption_path,
+        ["system_id", "quantity", "complete", "adsorption_energy_ev"],
+        [
+            {
+                "system_id": "co_on_surface",
+                "quantity": "adsorption_electronic_energy",
+                "complete": "True",
+                "adsorption_energy_ev": "-0.2",
+            }
+        ],
+    )
+    data = load_dashboard_data(adsorption_tables=(adsorption_path,))
+
+    assert adsorption_energy_rows(data)[0]["system_id"] == "co_on_surface"
+
+
+def test_dashboard_che_table_correction_display(tmp_path):
+    che_path = tmp_path / "che_table.csv"
+    _write_csv(
+        che_path,
+        ["reaction_id", "complete", "corrected_delta_g_ev", "correction_total_eV", "correction_terms"],
+        [
+            {
+                "reaction_id": "step_1",
+                "complete": "True",
+                "corrected_delta_g_ev": "0.3",
+                "correction_total_eV": "-0.1",
+                "correction_terms": "CHE potential correction=-0.1 eV",
+            }
+        ],
+    )
+    data = load_dashboard_data(che_tables=(che_path,))
+
+    assert che_energy_rows(data)[0]["reaction_id"] == "step_1"
+    assert "CHE potential" in che_correction_display_rows(data)[0]["correction_terms"]
+
+
 def test_dashboard_render_helper_with_loaded_data(tmp_path):
     fake = _FakeStreamlit()
     config = DashboardConfig(project_name="demo")
@@ -389,3 +469,12 @@ def _dashboard_data_with_properties(tmp_path):
         ],
     )
     return load_dashboard_data(results=(result_path,))
+
+
+def _write_csv(path, headers, rows):
+    import csv
+
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)

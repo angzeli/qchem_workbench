@@ -24,6 +24,14 @@ from qchem_workbench.dashboard.quality import (
     quality_check_rows,
     quality_summary_rows,
 )
+from qchem_workbench.dashboard.workflows import (
+    adsorption_energy_rows,
+    che_correction_display_rows,
+    che_energy_rows,
+    incomplete_analysis_rows,
+    method_consistency_warnings,
+    reaction_energy_rows,
+)
 from qchem_workbench.projects.manifest import ProjectManifest, load_project_manifest
 
 
@@ -190,6 +198,25 @@ def render_dashboard(
                     mime="text/csv",
                 )
 
+        st.header("Reaction, adsorption, and CHE analyses")
+        reaction_rows = reaction_energy_rows(data)
+        if reaction_rows:
+            st.subheader("Reaction energies")
+            st.table(reaction_rows)
+            _render_analysis_warnings(st, "reaction energies", reaction_rows)
+        adsorption_rows = adsorption_energy_rows(data)
+        if adsorption_rows:
+            st.subheader("Adsorption energies")
+            st.table(adsorption_rows)
+            _render_analysis_warnings(st, "adsorption energies", adsorption_rows)
+        che_rows = che_energy_rows(data)
+        if che_rows:
+            st.subheader("CHE free energies")
+            st.table(che_rows)
+            st.subheader("CHE correction terms")
+            st.table(che_correction_display_rows(data))
+            _render_analysis_warnings(st, "CHE free energies", che_rows)
+
 
 def _import_streamlit() -> Any:
     try:
@@ -200,6 +227,17 @@ def _import_streamlit() -> Any:
             "`pip install qchem-workbench[dashboard]`."
         ) from exc
     return st
+
+
+def _render_analysis_warnings(st: Any, label: str, rows: list[dict[str, Any]]) -> None:
+    incomplete = incomplete_analysis_rows(rows)
+    if incomplete:
+        st.subheader(f"Incomplete {label}")
+        st.table(incomplete)
+    consistency = method_consistency_warnings(rows, label=label)
+    if consistency:
+        st.subheader(f"Method consistency warnings for {label}")
+        st.table(consistency)
 
 
 def _path_text(path: Path | None) -> str:
