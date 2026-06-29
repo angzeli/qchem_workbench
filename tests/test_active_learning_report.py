@@ -44,6 +44,7 @@ def test_report_with_pending_and_failed_candidates(tmp_path):
     assert "## Failed and pending calculations" in report
     assert "cand_002" in report
     assert "synthetic parser failure" in report
+    assert "missing_adsorption_energy" in report
 
 
 def test_report_with_proposals(tmp_path):
@@ -120,6 +121,9 @@ def _dataset_rows():
             "quality_error_count": "0",
             "quality_warning_count": "0",
             "quality_flags": "",
+            "ads_quality_error_count": "0",
+            "ads_quality_warning_count": "0",
+            "ads_quality_flags": "",
             "al_score": "0.4",
             "al_rank": "1",
             "al_status": "ranked",
@@ -133,6 +137,9 @@ def _dataset_rows():
             "quality_error_count": "1",
             "quality_warning_count": "1",
             "quality_flags": "missing_descriptor",
+            "ads_quality_error_count": "1",
+            "ads_quality_warning_count": "1",
+            "ads_quality_flags": "missing_adsorption_energy",
             "al_score": "",
             "al_rank": "",
             "al_status": "excluded",

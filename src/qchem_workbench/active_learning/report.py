@@ -249,13 +249,11 @@ def _pending_failed_candidates(state: CampaignState) -> str:
 def _quality_warnings(rows: list[dict[str, str]]) -> str:
     flagged = []
     for row in rows:
-        warning_count = _optional_int(row.get("quality_warning_count")) or 0
-        error_count = _optional_int(row.get("quality_error_count")) or 0
-        flags = row.get("quality_flags", "")
-        if warning_count or error_count or flags:
+        for source, error_count, warning_count, flags in _quality_entries(row):
             flagged.append(
                 (
                     row.get("candidate_id"),
+                    source,
                     error_count,
                     warning_count,
                     flags,
@@ -265,7 +263,7 @@ def _quality_warnings(rows: list[dict[str, str]]) -> str:
     if not flagged:
         return "## Quality warnings\n\nNo quality flags were present in the dataset."
     return "## Quality warnings\n\n" + _markdown_table(
-        ["Candidate ID", "Quality errors", "Quality warnings", "Flags", "Missing data"],
+        ["Candidate ID", "Source", "Quality errors", "Quality warnings", "Flags", "Missing data"],
         flagged,
     )
 
@@ -291,6 +289,30 @@ def _objective_value_columns(headers: list[str]) -> list[str]:
         for column in headers
         if (column.startswith("objective_") and column.endswith("_value")) or column == "al_score"
     ]
+
+
+def _quality_entries(row: dict[str, str]) -> list[tuple[str, int, int, str]]:
+    prefixes = set()
+    for key in row:
+        if key in {"quality_error_count", "quality_warning_count", "quality_flags"}:
+            prefixes.add("")
+        elif key.endswith("_quality_error_count"):
+            prefixes.add(key.removesuffix("_quality_error_count"))
+        elif key.endswith("_quality_warning_count"):
+            prefixes.add(key.removesuffix("_quality_warning_count"))
+        elif key.endswith("_quality_flags"):
+            prefixes.add(key.removesuffix("_quality_flags"))
+
+    entries = []
+    for prefix in sorted(prefixes):
+        label = prefix or "dataset"
+        column_prefix = f"{prefix}_" if prefix else ""
+        error_count = _optional_int(row.get(f"{column_prefix}quality_error_count")) or 0
+        warning_count = _optional_int(row.get(f"{column_prefix}quality_warning_count")) or 0
+        flags = row.get(f"{column_prefix}quality_flags", "")
+        if error_count or warning_count or flags:
+            entries.append((label, error_count, warning_count, flags))
+    return entries
 
 
 def _unit_for_column(column: str) -> str:

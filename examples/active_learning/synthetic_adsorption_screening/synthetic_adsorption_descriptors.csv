@@ -1,0 +1,3 @@
+candidate_id,system_id,adsorption_energy_eV,gap_eV,quality_error_count,quality_warning_count,quality_flags,provenance
+cand_co_top,co_top_cu111,-0.45,1.8,0,0,,synthetic fixture
+cand_h_top,h_top_cu111,,2.1,1,1,missing_adsorption_energy,synthetic fixture

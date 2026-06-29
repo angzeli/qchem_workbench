@@ -21,6 +21,10 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from qchem_workbench.cli import main  # noqa: E402
+from qchem_workbench.active_learning.candidates import load_candidate_registry  # noqa: E402
+from qchem_workbench.active_learning.datasets import load_active_learning_campaign  # noqa: E402
+from qchem_workbench.active_learning.objectives import load_objective_spec  # noqa: E402
+from qchem_workbench.active_learning.state import load_campaign_state  # noqa: E402
 from qchem_workbench.backends.ase_adsorption import (  # noqa: E402
     load_adsorbate_placement_config,
 )
@@ -44,6 +48,7 @@ EXPECTED_EXAMPLE_DIRS = (
     "che_analysis",
     "screening_campaign",
     "microkinetics/synthetic_co_oxidation",
+    "active_learning/synthetic_adsorption_screening",
 )
 
 SYNTHETIC_FIXTURE_EXAMPLE_DIRS = EXPECTED_EXAMPLE_DIRS
@@ -403,6 +408,73 @@ def validate_microkinetics(work_dir: Path) -> None:
     )
 
 
+def validate_active_learning(work_dir: Path) -> None:
+    example = REPO_ROOT / "examples" / "active_learning" / "synthetic_adsorption_screening"
+    dataset_path = work_dir / "al_dataset.csv"
+    scored_path = work_dir / "al_scored.csv"
+    export_dir = work_dir / "bo_forge_export"
+
+    load_candidate_registry(example / "candidates.yaml")
+    load_active_learning_campaign(example / "campaign.yaml")
+    load_objective_spec(example / "objectives.yaml")
+    load_campaign_state(example / "campaign_state.json")
+    run_cli(
+        [
+            "active-learning",
+            "build-dataset",
+            str(example / "campaign.yaml"),
+            "--out",
+            str(dataset_path),
+        ]
+    )
+    run_cli(
+        [
+            "active-learning",
+            "score-dataset",
+            str(dataset_path),
+            str(example / "objectives.yaml"),
+            "--out",
+            str(scored_path),
+        ]
+    )
+    run_cli(
+        [
+            "active-learning",
+            "export-bo-forge",
+            str(example / "campaign.yaml"),
+            str(scored_path),
+            "--out",
+            str(export_dir),
+        ]
+    )
+    run_cli(
+        [
+            "active-learning",
+            "import-proposals",
+            str(example / "campaign.yaml"),
+            str(example / "proposed_candidates.csv"),
+            "--out",
+            str(work_dir / "next_calculations.yaml"),
+        ]
+    )
+    run_cli(["active-learning", "state", str(example / "campaign_state.json"), "summary"])
+    run_cli(
+        [
+            "active-learning",
+            "report",
+            str(example / "campaign.yaml"),
+            str(example / "campaign_state.json"),
+            str(scored_path),
+            "--objectives",
+            str(example / "objectives.yaml"),
+            "--proposals",
+            str(example / "proposed_candidates.csv"),
+            "--out",
+            str(work_dir / "al_report.md"),
+        ]
+    )
+
+
 def main_script() -> int:
     with tempfile.TemporaryDirectory(prefix="qchemwb-examples-") as temp_dir:
         work_dir = Path(temp_dir)
@@ -419,6 +491,7 @@ def main_script() -> int:
             ("CHE analysis workflow", validate_che_analysis),
             ("screening campaign workflow", validate_screening_campaign),
             ("microkinetics workflow", validate_microkinetics),
+            ("active-learning workflow", validate_active_learning),
         )
         for label, step in steps:
             print(f"[v2 example gate] {label}")

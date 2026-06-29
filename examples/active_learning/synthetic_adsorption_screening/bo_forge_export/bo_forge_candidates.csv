@@ -1,0 +1,3 @@
+candidate_id,candidate_type,species,structure,system,pathway,status,provenance
+cand_co_top,adsorbate_system,,,co_top_cu111,,pending,qchem_workbench synthetic fixture
+cand_h_top,adsorbate_system,,,h_top_cu111,,pending,qchem_workbench synthetic fixture

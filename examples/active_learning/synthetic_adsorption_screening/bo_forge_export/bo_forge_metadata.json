@@ -1,0 +1,15 @@
+{
+  "campaign_name": "synthetic adsorption active-learning example",
+  "candidate_count": 2,
+  "constraint_columns": [
+    "constraint_require_no_quality_errors_pass"
+  ],
+  "format": "qchem_workbench_bo_forge_interchange",
+  "objective_columns": [
+    "al_score",
+    "objective_minimise_adsorption_energy_value"
+  ],
+  "schema_version": 1,
+  "stable_path": "file_based_csv_json",
+  "warnings": []
+}

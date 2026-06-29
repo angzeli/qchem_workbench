@@ -451,6 +451,21 @@ tables. Missing descriptor values remain missing. Ranking outputs include
 visible score components and exclusion reasons; they are not predictions of
 activity, selectivity, or experimental behavior.
 
+## Active-Learning Handoff
+
+Active-learning helpers build descriptor datasets, apply explicit objective and
+constraint rules, export a stable BO Forge CSV/JSON handoff folder, import
+external proposals, track campaign state, and generate loop reports:
+
+```bash
+qchemwb active-learning build-dataset examples/active_learning/synthetic_adsorption_screening/campaign.yaml --out /tmp/qchemwb-al-dataset.csv
+qchemwb active-learning score-dataset /tmp/qchemwb-al-dataset.csv examples/active_learning/synthetic_adsorption_screening/objectives.yaml --out /tmp/qchemwb-al-scored.csv
+qchemwb active-learning export-bo-forge examples/active_learning/synthetic_adsorption_screening/campaign.yaml /tmp/qchemwb-al-scored.csv --out /tmp/qchemwb-bo-forge
+```
+
+These commands do not run Bayesian optimisation and do not require BO Forge.
+They keep descriptors, objectives, constraints, and proposal provenance visible.
+
 ## Quality Checks And Triage
 
 Quality checks are conservative and generic:
@@ -522,6 +537,7 @@ Surface, CHE, and screening examples:
 - `examples/surface_adsorption/`
 - `examples/che_analysis/`
 - `examples/screening_campaign/`
+- `examples/active_learning/synthetic_adsorption_screening/`
 
 Generic pathway example:
 

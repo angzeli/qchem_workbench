@@ -1,0 +1,10 @@
+schema_version: 1
+active_learning_campaign:
+  name: synthetic adsorption active-learning example
+  candidates: candidates.yaml
+  descriptor_sources:
+    - id: ads
+      type: csv
+      path: synthetic_adsorption_descriptors.csv
+  metadata:
+    notes: Synthetic example for file-based active-learning handoff.

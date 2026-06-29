@@ -1,0 +1,11 @@
+schema_version: 1
+objectives:
+  - id: minimise_adsorption_energy
+    source_column: ads_adsorption_energy_eV
+    direction: minimise
+    weight: 1.0
+constraints:
+  - id: require_no_quality_errors
+    source_column: ads_quality_error_count
+    op: equals
+    value: 0

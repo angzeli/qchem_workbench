@@ -1,0 +1,18 @@
+schema_version: 1
+candidates:
+  - id: cand_co_top
+    type: adsorbate_system
+    system: co_top_cu111
+    features:
+      descriptor_source: synthetic_adsorption_csv
+    metadata:
+      notes: Synthetic adsorption-screening candidate.
+      provenance: qchem_workbench synthetic fixture
+  - id: cand_h_top
+    type: adsorbate_system
+    system: h_top_cu111
+    features:
+      descriptor_source: synthetic_adsorption_csv
+    metadata:
+      notes: Synthetic candidate with intentionally missing descriptor data.
+      provenance: qchem_workbench synthetic fixture

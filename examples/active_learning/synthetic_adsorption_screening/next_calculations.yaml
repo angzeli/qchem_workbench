@@ -1,0 +1,17 @@
+schema_version: 1
+calculation_todos:
+- candidate_id: cand_h_top
+  candidate_type: adsorbate_system
+  species: null
+  structure: null
+  system: h_top_cu111
+  pathway: null
+  proposal_rank: 1
+  acquisition_value: 0.72
+  proposed_by: synthetic_bo_forge_fixture
+  notes: Synthetic proposal for demonstrating import only
+  status: todo
+metadata:
+  campaign_name: synthetic adsorption active-learning example
+  source: active_learning_proposals
+  note: Planning manifest only; qchem-workbench does not run calculations automatically.

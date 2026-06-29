@@ -105,10 +105,13 @@ def _write_observations(
         for column in headers
         if column
         not in {
+            "candidate_id",
+            "observed_status",
             "al_rank",
             "al_status",
             "al_score",
             "al_reasons",
+            "provenance",
         }
         and not column.startswith("objective_")
         and not column.startswith("constraint_")

@@ -55,6 +55,8 @@ Use this checklist before tagging or publishing a qchem-workbench release.
 - Confirm adsorption energy and adsorption free-energy wording remains distinct.
 - Confirm campaign rankings are described as explicit rule-based workflow
   tables, not activity predictions.
+- Confirm active-learning and BO Forge handoff examples are described as
+  file-based bookkeeping, not automatic optimisation or discovery.
 
 ## Changelog Update
 

@@ -18,6 +18,7 @@ ESPRESSO support is input/output adapter support.
 - Optional PySCF and ASE integrations.
 - Generic reaction, adsorption, CHE-style, convergence-study, and screening
   bookkeeping.
+- File-based active-learning and BO Forge handoff utilities.
 - Transparent microkinetic network bookkeeping, optional SciPy simulation,
   steady-state solving, rate/TOF tables, sensitivity, and user-provided
   uncertainty sampling.

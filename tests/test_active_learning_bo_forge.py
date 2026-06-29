@@ -68,6 +68,22 @@ def test_pending_candidates_preserved(tmp_path):
     assert rows[0]["observed_status"] == "pending"
 
 
+def test_observation_headers_are_unique(tmp_path):
+    campaign = load_active_learning_campaign(_write_campaign_and_candidates(tmp_path))
+    out_dir = tmp_path / "bo_forge_export"
+
+    export_bo_forge_interchange(
+        campaign,
+        [_scored_row("cand_001")],
+        list(_scored_row("cand_001")),
+        out_dir,
+    )
+
+    header = (out_dir / "bo_forge_observations.csv").read_text(encoding="utf-8").splitlines()[0]
+    columns = header.split(",")
+    assert len(columns) == len(set(columns))
+
+
 def test_export_bo_forge_cli(tmp_path, capsys):
     campaign_path = _write_campaign_and_candidates(tmp_path)
     dataset_path = tmp_path / "scored.csv"

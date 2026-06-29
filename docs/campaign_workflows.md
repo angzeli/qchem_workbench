@@ -31,3 +31,6 @@ qchemwb rank-candidates campaign.yaml descriptors.csv --out ranked_candidates.cs
 
 Ranking outputs include visible score components and reasons for excluded rows.
 Missing descriptor values are not imputed.
+
+For file-based active-learning loops, BO Forge handoff files, proposal import,
+and campaign state tracking, see `active_learning.md`.

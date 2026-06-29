@@ -1,0 +1,3 @@
+candidate_id,candidate_type,species,structure,system,pathway,quality_error_count,quality_warning_count,quality_info_count,quality_flags,ads_adsorption_energy_eV,ads_gap_eV,ads_quality_error_count,ads_quality_warning_count,ads_quality_flags,ads_provenance,ads_source_path,missing_ads_reason
+cand_co_top,adsorbate_system,,,co_top_cu111,,0,0,0,,-0.45,1.8,0,0,,synthetic fixture,examples/active_learning/synthetic_adsorption_screening/synthetic_adsorption_descriptors.csv,
+cand_h_top,adsorbate_system,,,h_top_cu111,,0,0,0,,,2.1,1,1,missing_adsorption_energy,synthetic fixture,examples/active_learning/synthetic_adsorption_screening/synthetic_adsorption_descriptors.csv,

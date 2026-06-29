@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "candidates": {
+    "cand_co_top": {
+      "state": "completed",
+      "result": "synthetic_adsorption_descriptors.csv",
+      "reason": "Synthetic descriptor row is present.",
+      "metadata": {
+        "fixture": "synthetic"
+      }
+    },
+    "cand_h_top": {
+      "state": "pending",
+      "reason": "Synthetic example keeps this candidate pending for loop-report coverage.",
+      "metadata": {
+        "fixture": "synthetic"
+      }
+    }
+  },
+  "audit_log": []
+}
