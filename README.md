@@ -38,6 +38,10 @@ The current workflow support focuses on:
 CO2RR is included as the first domain example, not as the scope of the package.
 Core modules remain generic and backend-agnostic.
 
+The v3 platform scope, stable public imports, CLI stability policy, schema
+version table, optional feature groups, and deprecation policy are documented in
+[`docs/api_stability.md`](docs/api_stability.md).
+
 ## Installation
 
 For local development:

@@ -27,3 +27,6 @@ ESPRESSO support is input/output adapter support.
 
 All examples using committed output files are synthetic fixtures unless stated
 otherwise.
+
+The v3 platform scope and stability policy are documented in
+[`api_stability.md`](api_stability.md).
