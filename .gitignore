@@ -29,6 +29,8 @@ data/
 local_data/
 outputs/
 results/
+!examples/dashboard_demo/results/
+!examples/dashboard_demo/results/results.json
 reports/
 
 # Quantum-chemistry calculation outputs and scratch files
