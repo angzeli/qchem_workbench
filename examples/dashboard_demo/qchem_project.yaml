@@ -1,0 +1,6 @@
+schema_version: 1
+project:
+  name: synthetic dashboard demo
+  species: species.yaml
+  results: results/results.json
+  reports: reports/dashboard_report.md

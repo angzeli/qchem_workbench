@@ -31,6 +31,10 @@ from qchem_workbench.backends.ase_adsorption import (  # noqa: E402
 from qchem_workbench.backends.qe_pseudos import (  # noqa: E402
     load_pseudopotential_manifest,
 )
+from qchem_workbench.dashboard.data import load_dashboard_data  # noqa: E402
+from qchem_workbench.dashboard.report import (  # noqa: E402
+    generate_dashboard_markdown_report,
+)
 from qchem_workbench.microkinetics.parameters import load_rate_parameter_set  # noqa: E402
 from qchem_workbench.microkinetics.schema import load_microkinetic_model  # noqa: E402
 from qchem_workbench.microkinetics.uncertainty import (  # noqa: E402
@@ -49,6 +53,7 @@ EXPECTED_EXAMPLE_DIRS = (
     "screening_campaign",
     "microkinetics/synthetic_co_oxidation",
     "active_learning/synthetic_adsorption_screening",
+    "dashboard_demo",
 )
 
 SYNTHETIC_FIXTURE_EXAMPLE_DIRS = EXPECTED_EXAMPLE_DIRS
@@ -65,6 +70,9 @@ SCHEMA_CHECK_FILES = (
     "examples/screening_campaign/results.json",
     "examples/surface_adsorption/results.json",
     "examples/qe_parsing/convergence_results.json",
+    "examples/dashboard_demo/qchem_project.yaml",
+    "examples/dashboard_demo/species.yaml",
+    "examples/dashboard_demo/results/results.json",
 )
 
 STATIC_SYNTHETIC_RESULT_STORES = (
@@ -72,6 +80,7 @@ STATIC_SYNTHETIC_RESULT_STORES = (
     "examples/screening_campaign/results.json",
     "examples/surface_adsorption/results.json",
     "examples/qe_parsing/convergence_results.json",
+    "examples/dashboard_demo/results/results.json",
 )
 
 
@@ -475,6 +484,48 @@ def validate_active_learning(work_dir: Path) -> None:
     )
 
 
+def validate_dashboard_demo(work_dir: Path) -> None:
+    example = REPO_ROOT / "examples" / "dashboard_demo"
+
+    data = load_dashboard_data(
+        project=example / "qchem_project.yaml",
+        pathway_tables=(example / "reaction_table.csv",),
+        adsorption_tables=(example / "adsorption_table.csv",),
+        active_learning_datasets=(example / "active_learning_dataset.csv",),
+        active_learning_state=example / "campaign_state.json",
+    )
+    required_sections = (
+        "species",
+        "results[1]",
+        "pathway_table[1]",
+        "adsorption_table[1]",
+        "active_learning_dataset[1]",
+        "active_learning_state",
+    )
+    missing_sections = [
+        section_name
+        for section_name in required_sections
+        if data.section(section_name) is None
+    ]
+    if missing_sections:
+        raise SystemExit(
+            "dashboard demo did not load expected section(s): "
+            + ", ".join(missing_sections)
+        )
+    report = generate_dashboard_markdown_report(data)
+    if "Dashboard caveats" not in report:
+        raise SystemExit("dashboard report is missing dashboard caveats")
+    run_cli(
+        [
+            "dashboard-report",
+            "--project",
+            str(example / "qchem_project.yaml"),
+            "--out",
+            str(work_dir / "dashboard_report.md"),
+        ]
+    )
+
+
 def main_script() -> int:
     with tempfile.TemporaryDirectory(prefix="qchemwb-examples-") as temp_dir:
         work_dir = Path(temp_dir)
@@ -492,6 +543,7 @@ def main_script() -> int:
             ("screening campaign workflow", validate_screening_campaign),
             ("microkinetics workflow", validate_microkinetics),
             ("active-learning workflow", validate_active_learning),
+            ("dashboard workflow", validate_dashboard_demo),
         )
         for label, step in steps:
             print(f"[v2 example gate] {label}")

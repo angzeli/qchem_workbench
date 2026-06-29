@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "candidates": {
+    "water_candidate": {
+      "state": "completed",
+      "result": "results/results.json",
+      "reason": "Synthetic dashboard fixture row is present.",
+      "metadata": {
+        "fixture": "synthetic"
+      }
+    },
+    "pending_candidate": {
+      "state": "pending",
+      "reason": "Synthetic pending candidate for dashboard review.",
+      "metadata": {
+        "fixture": "synthetic"
+      }
+    }
+  },
+  "audit_log": []
+}

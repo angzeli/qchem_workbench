@@ -43,3 +43,9 @@ Check schema files:
 ```bash
 qchemwb schema-check demo/species.yaml
 ```
+
+Launch the optional read-only dashboard after installing the dashboard extra:
+
+```bash
+qchemwb dashboard --project examples/dashboard_demo/qchem_project.yaml
+```

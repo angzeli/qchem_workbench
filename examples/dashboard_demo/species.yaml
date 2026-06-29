@@ -1,0 +1,9 @@
+schema_version: 1
+species:
+  - name: water
+    formula: H2O
+    charge: 0
+    multiplicity: 1
+    geometry_path: xyz/water.xyz
+    tags: [synthetic, dashboard-demo]
+    notes: Synthetic dashboard fixture molecule.

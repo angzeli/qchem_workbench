@@ -16,6 +16,7 @@ nav:
   - Microkinetics: microkinetics.md
   - Campaign Workflows: campaign_workflows.md
   - Active Learning: active_learning.md
+  - Dashboard: dashboard.md
   - Electrochemistry: electrochemistry.md
   - Scientific Caveats: scientific_caveats.md
   - v1 Example Compatibility: v1_examples.md

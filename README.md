@@ -76,6 +76,12 @@ For documentation builds:
 pip install -e ".[docs]"
 ```
 
+For the optional read-only Streamlit dashboard:
+
+```bash
+pip install -e ".[dashboard]"
+```
+
 For local development tests and currently configured developer tools:
 
 ```bash
@@ -488,6 +494,19 @@ qchemwb triage /tmp/qchemwb-basic-results.json --out /tmp/qchemwb-failed-jobs.md
 Triage suggestions are conservative. They direct users to inspect source files
 and warnings rather than prescribing fake fixes.
 
+## Dashboard
+
+The optional Streamlit dashboard is for read-only project review:
+
+```bash
+qchemwb dashboard --project examples/dashboard_demo/qchem_project.yaml
+qchemwb dashboard-report --project examples/dashboard_demo/qchem_project.yaml --out /tmp/qchemwb-dashboard-report.md
+```
+
+It summarizes loaded project files, results, warnings, structures, and
+workflow tables. It does not run external engines or validate scientific
+correctness.
+
 ## Project Manifests
 
 Project manifests are optional YAML files for explicit batch workflows:
@@ -538,6 +557,7 @@ Surface, CHE, and screening examples:
 - `examples/che_analysis/`
 - `examples/screening_campaign/`
 - `examples/active_learning/synthetic_adsorption_screening/`
+- `examples/dashboard_demo/`
 
 Generic pathway example:
 

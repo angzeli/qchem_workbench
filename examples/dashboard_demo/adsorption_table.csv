@@ -1,0 +1,2 @@
+system_id,quantity,complete,adsorption_energy_hartree,adsorption_energy_ev,adsorption_energy_kj_mol,slab_result,adsorbate_result,combined_result,missing,warnings,notes
+synthetic_adsorption,adsorption_electronic_energy,False,,,,slab_clean,adsorbate_gas,combined_system,combined_system,missing combined fixture,Synthetic dashboard fixture only

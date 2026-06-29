@@ -1,0 +1,2 @@
+reaction_id,label,quantity,complete,delta_hartree,delta_ev,delta_kj_mol,missing_species,notes
+synthetic_step,Synthetic dashboard reaction,delta_e_electronic,True,0.01,0.272114,26.255,,Synthetic dashboard fixture only

@@ -19,6 +19,7 @@ ESPRESSO support is input/output adapter support.
 - Generic reaction, adsorption, CHE-style, convergence-study, and screening
   bookkeeping.
 - File-based active-learning and BO Forge handoff utilities.
+- Optional read-only Streamlit dashboard for project review.
 - Transparent microkinetic network bookkeeping, optional SciPy simulation,
   steady-state solving, rate/TOF tables, sensitivity, and user-provided
   uncertainty sampling.
