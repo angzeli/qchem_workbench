@@ -42,7 +42,7 @@ The v3 platform scope, stable public imports, CLI stability policy, schema
 version table, optional feature groups, and deprecation policy are documented in
 [`docs/api_stability.md`](docs/api_stability.md).
 
-## Installation
+## 📦 Installation
 
 For local development:
 
@@ -110,7 +110,7 @@ Build the documentation site when the docs extra is installed:
 python -m mkdocs build --strict
 ```
 
-## Quickstart
+## 🚀 Quickstart
 
 Create a starter workflow directory and validate its species registry:
 
@@ -174,7 +174,7 @@ qchemwb microkinetics steady-state model.yaml --conditions conditions.yaml --out
 qchemwb microkinetics rates model.yaml --state /tmp/mk_steady_state.csv --conditions conditions.yaml --tof-species CO2_g --site-count 1.0 --out /tmp/mk_rates.csv
 ```
 
-## PySCF Backend
+## 🧮 PySCF Backend
 
 The PySCF backend is optional. Base package imports and most CLI commands work
 without PySCF installed. When PySCF is available, qchem-workbench can run simple
@@ -188,7 +188,7 @@ Current PySCF support is intentionally narrow: molecular single-point
 calculations only. The workflow manager records electronic energies and basic
 metadata; it does not overinterpret those values.
 
-## Gaussian Input And Output
+## 🧾 Gaussian Input And Output
 
 Gaussian input rendering writes `.gjf` files from species registries and generic
 calculation settings:
@@ -220,7 +220,7 @@ also populate optional property containers such as dipole moments, population
 analyses, molecular orbital tables, vibrational modes, and excited-state
 summaries.
 
-## ORCA Input And Output
+## ⚙️ ORCA Input And Output
 
 ORCA support is file-based. qchem-workbench can render `.inp` files and parse
 ORCA-like `.out` files into the same generic result schema:
@@ -235,7 +235,7 @@ cluster scheduler, and does not require ORCA for CI.
 ORCA property parsing is best-effort and uses the same generic property
 containers as Gaussian parsing when explicit sections are present.
 
-## ASE Structure Tools
+## 🧱 ASE Structure Tools
 
 ASE integration is optional. Base qchem-workbench commands, imports, and CI do
 not require ASE. When ASE is installed, qchem-workbench can bridge the generic
@@ -263,7 +263,7 @@ Generated slabs are labelled as starting geometries requiring human inspection.
 They are not relaxed slabs, and qchem-workbench does not run DFT or ASE
 calculators.
 
-## Quantum ESPRESSO pw.x Input And Output
+## ⚛️ Quantum ESPRESSO pw.x Input And Output
 
 QE support is currently limited to `pw.x` input rendering and output parsing.
 qchem-workbench does not execute QE and does not provide or choose
@@ -308,7 +308,7 @@ k-points, cells, pseudopotentials, smearing, and convergence settings are not
 guaranteed to be suitable for production calculations.
 See `docs/qe_surface_workflows.md` for QE and surface workflow caveats.
 
-## Species Registry Format
+## 🧬 Species Registry Format
 
 Species registries are YAML files with `schema_version: 1` and a `species` list.
 Geometry paths may be relative to the registry file.
@@ -328,7 +328,7 @@ species:
 The core species model is backend-independent. PySCF spin is derived only when
 the PySCF backend needs it.
 
-## Schema Versioning
+## 🧩 Schema Versioning
 
 Public workflow files use explicit schema versions. The current schema version
 is `1` for:
@@ -343,7 +343,7 @@ Missing `schema_version` fields and unsupported schema versions are rejected
 with clear errors. qchem-workbench does not silently reinterpret unknown schema
 versions.
 
-## Result Schema Overview
+## 📊 Result Schema Overview
 
 Calculation results keep physically distinct quantities in separate fields:
 
@@ -401,7 +401,7 @@ Stable result fields include:
 - `properties`
 - `source_path`
 
-## Reaction Table Workflow
+## 🔁 Reaction Table Workflow
 
 Pathway YAML files define stoichiometric bookkeeping only:
 
@@ -431,7 +431,7 @@ qchemwb reaction-table examples/pathways/basic_isomerisation.yaml /tmp/qchemwb-b
 Electronic and Gibbs modes do not fall back to each other. No electrochemical or
 standard-state corrections are applied.
 
-## CHE-Style Electrochemical Bookkeeping
+## ⚡ CHE-Style Electrochemical Bookkeeping
 
 CHE-style analysis starts from explicit Gibbs free energies and writes every
 correction term separately. qchem-workbench does not choose proton/electron
@@ -446,7 +446,7 @@ The built-in bookkeeping terms use documented sign conventions:
 responsible for deciding whether those conventions and references fit their
 workflow. See `docs/electrochemistry.md`.
 
-## Screening Campaigns
+## 🔎 Screening Campaigns
 
 Campaign manifests define candidate IDs, descriptor columns, result paths, and
 explicit ranking rules:
@@ -461,7 +461,7 @@ tables. Missing descriptor values remain missing. Ranking outputs include
 visible score components and exclusion reasons; they are not predictions of
 activity, selectivity, or experimental behavior.
 
-## Active-Learning Handoff
+## 🔄 Active-Learning Handoff
 
 Active-learning helpers build descriptor datasets, apply explicit objective and
 constraint rules, export a stable BO Forge CSV/JSON handoff folder, import
@@ -476,7 +476,7 @@ qchemwb active-learning export-bo-forge examples/active_learning/synthetic_adsor
 These commands do not run Bayesian optimisation and do not require BO Forge.
 They keep descriptors, objectives, constraints, and proposal provenance visible.
 
-## Quality Checks And Triage
+## ✅ Quality Checks And Triage
 
 Quality checks are conservative and generic:
 
@@ -498,7 +498,7 @@ qchemwb triage /tmp/qchemwb-basic-results.json --out /tmp/qchemwb-failed-jobs.md
 Triage suggestions are conservative. They direct users to inspect source files
 and warnings rather than prescribing fake fixes.
 
-## Dashboard
+## 🖥️ Dashboard
 
 The optional Streamlit dashboard is for read-only project review:
 
@@ -511,7 +511,7 @@ It summarizes loaded project files, results, warnings, structures, and
 workflow tables. It does not run external engines or validate scientific
 correctness.
 
-## Project Manifests
+## 🗂️ Project Manifests
 
 Project manifests are optional YAML files for explicit batch workflows:
 
@@ -533,7 +533,7 @@ qchemwb run-project qchem_project.yaml
 
 Only listed steps run. The command does not execute Gaussian.
 
-## Examples
+## 🧪 Examples
 
 CO2RR molecular bookkeeping example:
 
@@ -567,7 +567,7 @@ Generic pathway example:
 
 - `examples/pathways/basic_isomerisation.yaml`
 
-## Scientific Caveats
+## ⚠️ Scientific Caveats
 
 - Do not invent chemical data, thermochemical corrections, or scientific claims.
 - Do not silently accept failed calculations.
@@ -582,6 +582,6 @@ Generic pathway example:
 - Surface and CHE workflow outputs are bookkeeping aids that require expert
   review before scientific interpretation.
 
-## Author
+## 👤 Author
 
 Angze Li
