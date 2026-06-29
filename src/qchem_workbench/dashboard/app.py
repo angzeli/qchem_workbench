@@ -13,6 +13,11 @@ from qchem_workbench.dashboard.molecular import (
     molecular_result_rows,
     table_rows_to_csv,
 )
+from qchem_workbench.dashboard.microkinetics import (
+    final_coverage_rows,
+    microkinetic_output_sections,
+    steady_state_warning_rows,
+)
 from qchem_workbench.dashboard.overview import (
     backend_method_basis_rows,
     loaded_file_rows,
@@ -227,6 +232,26 @@ def render_dashboard(
             )
             st.table(structure_rows)
 
+        microkinetic_sections = microkinetic_output_sections(data)
+        if any(microkinetic_sections.values()):
+            st.header("Microkinetics")
+            st.caption(
+                "Microkinetic dashboard tables summarize loaded outputs only; "
+                "steady-state uniqueness or experimental validity is not inferred."
+            )
+            _render_microkinetic_table(st, "Simulation", microkinetic_sections["simulation"])
+            final_rows = final_coverage_rows(microkinetic_sections["simulation"])
+            if final_rows:
+                st.subheader("Final coverages")
+                st.table(final_rows)
+            _render_microkinetic_table(st, "Steady state", microkinetic_sections["steady_state"])
+            steady_warnings = steady_state_warning_rows(microkinetic_sections["steady_state"])
+            if steady_warnings:
+                st.subheader("Steady-state warnings")
+                st.table(steady_warnings)
+            _render_microkinetic_table(st, "Rates and TOF", microkinetic_sections["rates"])
+            _render_microkinetic_table(st, "Sensitivity", microkinetic_sections["sensitivity"])
+
 
 def _import_streamlit() -> Any:
     try:
@@ -248,6 +273,12 @@ def _render_analysis_warnings(st: Any, label: str, rows: list[dict[str, Any]]) -
     if consistency:
         st.subheader(f"Method consistency warnings for {label}")
         st.table(consistency)
+
+
+def _render_microkinetic_table(st: Any, label: str, rows: list[dict[str, Any]]) -> None:
+    if rows:
+        st.subheader(label)
+        st.table(rows)
 
 
 def _path_text(path: Path | None) -> str:

@@ -18,6 +18,12 @@ from qchem_workbench.dashboard.molecular import (
     molecular_result_rows,
     table_rows_to_csv,
 )
+from qchem_workbench.dashboard.microkinetics import (
+    final_coverage_rows,
+    load_microkinetic_network_rows,
+    microkinetic_output_sections,
+    steady_state_warning_rows,
+)
 from qchem_workbench.dashboard.overview import (
     backend_method_basis_rows,
     missing_data_rows,
@@ -388,6 +394,54 @@ def test_dashboard_missing_structure_summary():
     assert "could not load structure" in rows[0]["status"]
 
 
+def test_dashboard_microkinetic_network_rows(tmp_path):
+    model_path = _write_microkinetic_model(tmp_path)
+
+    rows, warnings = load_microkinetic_network_rows(model_path)
+
+    assert warnings == []
+    assert rows is not None
+    assert rows["site_types"][0]["id"] == "star"
+    assert rows["steps"][0]["rate_constant_forward"] == "k_ads"
+
+
+def test_dashboard_microkinetic_output_sections(tmp_path):
+    simulation = tmp_path / "trajectory.csv"
+    steady = tmp_path / "steady.csv"
+    rates = tmp_path / "rates.csv"
+    sensitivity = tmp_path / "sensitivity.csv"
+    _write_csv(simulation, ["time", "CO_star", "star"], [{"time": "0", "CO_star": "0.1", "star": "0.9"}])
+    _write_csv(
+        steady,
+        ["species", "coverage", "residual", "success", "max_abs_residual"],
+        [{"species": "CO_star", "coverage": "0.5", "residual": "0.1", "success": "False", "max_abs_residual": "0.1"}],
+    )
+    _write_csv(rates, ["row_type", "id", "rate"], [{"row_type": "tof", "id": "CO_g", "rate": "1.0"}])
+    _write_csv(
+        sensitivity,
+        ["parameter_id", "observable", "sensitivity"],
+        [{"parameter_id": "k_ads", "observable": "product_rate:CO_g", "sensitivity": "0.2"}],
+    )
+
+    data = load_dashboard_data(
+        microkinetic_outputs=(simulation, steady, rates, sensitivity),
+    )
+    sections = microkinetic_output_sections(data)
+
+    assert final_coverage_rows(sections["simulation"])[0]["species"] == "CO_star"
+    assert steady_state_warning_rows(sections["steady_state"])[0]["species"] == "CO_star"
+    assert sections["rates"][0]["row_type"] == "tof"
+    assert sections["sensitivity"][0]["parameter_id"] == "k_ads"
+
+
+def test_dashboard_missing_microkinetic_output_is_not_fatal(tmp_path):
+    missing = tmp_path / "missing_microkinetic.csv"
+
+    data = load_dashboard_data(microkinetic_outputs=(missing,))
+
+    assert data.missing_sections == ("microkinetic_output[1]",)
+
+
 def test_dashboard_render_helper_with_loaded_data(tmp_path):
     fake = _FakeStreamlit()
     config = DashboardConfig(project_name="demo")
@@ -530,3 +584,35 @@ def _write_csv(path, headers, rows):
         writer = csv.DictWriter(handle, fieldnames=headers)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _write_microkinetic_model(tmp_path):
+    path = tmp_path / "model.yaml"
+    path.write_text(
+        "schema_version: 1\n"
+        "microkinetic_model:\n"
+        "  name: synthetic dashboard microkinetic fixture\n"
+        "  site_types:\n"
+        "    - id: star\n"
+        "      total_sites: 1.0\n"
+        "      unit: fraction\n"
+        "  species:\n"
+        "    gas:\n"
+        "      CO_g:\n"
+        "        phase: gas\n"
+        "    surface:\n"
+        "      CO_star:\n"
+        "        phase: surface\n"
+        "        site_type: star\n"
+        "  steps:\n"
+        "    - id: co_ads\n"
+        "      reversible: false\n"
+        "      reactants:\n"
+        "        CO_g: 1\n"
+        "        star: 1\n"
+        "      products:\n"
+        "        CO_star: 1\n"
+        "      rate_constant_forward: k_ads\n",
+        encoding="utf-8",
+    )
+    return path

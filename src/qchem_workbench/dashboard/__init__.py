@@ -19,6 +19,13 @@ from qchem_workbench.dashboard.molecular import (
     molecular_result_rows,
     table_rows_to_csv,
 )
+from qchem_workbench.dashboard.microkinetics import (
+    final_coverage_rows,
+    load_microkinetic_network_rows,
+    microkinetic_network_rows,
+    microkinetic_output_sections,
+    steady_state_warning_rows,
+)
 from qchem_workbench.dashboard.overview import (
     backend_method_basis_rows,
     loaded_file_rows,
@@ -58,6 +65,7 @@ __all__ = [
     "che_energy_rows",
     "dashboard_structure_rows",
     "failed_calculation_rows",
+    "final_coverage_rows",
     "formula_from_atoms",
     "incomplete_analysis_rows",
     "loaded_file_rows",
@@ -65,6 +73,9 @@ __all__ = [
     "load_dashboard_data",
     "missing_data_rows",
     "method_consistency_warnings",
+    "load_microkinetic_network_rows",
+    "microkinetic_network_rows",
+    "microkinetic_output_sections",
     "molecular_property_rows",
     "molecular_result_rows",
     "overview_summary_rows",
@@ -75,5 +86,6 @@ __all__ = [
     "structure_summary_from_xyz",
     "structure_summary_rows",
     "run_dashboard",
+    "steady_state_warning_rows",
     "table_rows_to_csv",
 ]
