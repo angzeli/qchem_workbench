@@ -36,6 +36,7 @@ from qchem_workbench.dashboard.quality import (
     quality_check_rows,
     quality_summary_rows,
 )
+from qchem_workbench.dashboard.report import generate_dashboard_markdown_report
 from qchem_workbench.dashboard.structures import dashboard_structure_rows
 from qchem_workbench.dashboard.workflows import (
     adsorption_energy_rows,
@@ -285,6 +286,15 @@ def render_dashboard(
                 if ranking_rows:
                     st.subheader("Ranking")
                     st.table(ranking_rows)
+
+        if data is not None:
+            st.header("Report export")
+            st.download_button(
+                "Download dashboard Markdown report",
+                generate_dashboard_markdown_report(data),
+                file_name="qchemwb_dashboard_report.md",
+                mime="text/markdown",
+            )
 
 
 def _import_streamlit() -> Any:

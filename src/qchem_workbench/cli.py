@@ -107,6 +107,8 @@ from qchem_workbench.core.species import Species
 from qchem_workbench.campaigns import load_campaign_manifest
 from qchem_workbench.core.structure import AtomisticStructure
 from qchem_workbench.dashboard.app import MissingStreamlitError, run_dashboard
+from qchem_workbench.dashboard.data import load_dashboard_data
+from qchem_workbench.dashboard.report import write_dashboard_markdown_report
 from qchem_workbench.microkinetics.parameters import (
     load_rate_parameter_set,
     rate_parameter_set_from_mapping,
@@ -722,6 +724,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dashboard_parser.set_defaults(func=_dashboard_command)
 
+    dashboard_report_parser = subparsers.add_parser(
+        "dashboard-report",
+        help="write a Markdown report from dashboard-loaded project data",
+    )
+    dashboard_report_parser.add_argument("--project", type=Path)
+    dashboard_report_parser.add_argument(
+        "--results",
+        action="append",
+        default=[],
+        type=Path,
+        help="result store path to include",
+    )
+    dashboard_report_parser.add_argument("--out", required=True, type=Path)
+    dashboard_report_parser.set_defaults(func=_dashboard_report_command)
+
     triage_parser = subparsers.add_parser(
         "triage", help="generate a failed-job triage Markdown report"
     )
@@ -769,6 +786,18 @@ def _dashboard_command(args: argparse.Namespace) -> int:
     except (OSError, ValueError, MissingStreamlitError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    return 0
+
+
+def _dashboard_report_command(args: argparse.Namespace) -> int:
+    try:
+        data = load_dashboard_data(project=args.project, results=tuple(args.results))
+        write_dashboard_markdown_report(args.out, data)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote dashboard Markdown report to {args.out}.")
     return 0
 
 

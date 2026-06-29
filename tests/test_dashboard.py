@@ -47,6 +47,7 @@ from qchem_workbench.dashboard.quality import (
     quality_check_rows,
     quality_summary_rows,
 )
+from qchem_workbench.dashboard.report import generate_dashboard_markdown_report
 from qchem_workbench.dashboard.structures import (
     dashboard_structure_rows,
     structure_summary_from_xyz,
@@ -507,6 +508,60 @@ def test_dashboard_active_learning_transition_rows(tmp_path):
 
     assert rows[0]["candidate_id"] == "cand_001"
     assert rows[0]["to_state"] == "completed"
+
+
+def test_dashboard_markdown_report_includes_loaded_sections(tmp_path):
+    data = _dashboard_data_with_results(tmp_path)
+
+    report = generate_dashboard_markdown_report(data)
+
+    assert "# qchem-workbench dashboard report" in report
+    assert "## Calculation result table" in report
+    assert "## Dashboard overview" in report
+    assert "## Dashboard caveats" in report
+
+
+def test_dashboard_markdown_report_includes_missing_data_caveat(tmp_path):
+    data = load_dashboard_data(results=(tmp_path / "missing.json",))
+
+    report = generate_dashboard_markdown_report(data)
+
+    assert "Missing data and warnings" in report
+    assert "Missing values remain missing" in report
+
+
+def test_dashboard_report_cli_writes_markdown(tmp_path, capsys):
+    result_path = tmp_path / "results.json"
+    save_result_collection(
+        result_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="B3LYP",
+                basis="def2-SVP",
+                task="single_point",
+                success=True,
+                electronic_energy_hartree=-76.0,
+            )
+        ],
+    )
+    out_path = tmp_path / "dashboard_report.md"
+
+    exit_code = main(
+        [
+            "dashboard-report",
+            "--results",
+            str(result_path),
+            "--out",
+            str(out_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "dashboard Markdown report" in captured.out
+    assert "Dashboard caveats" in out_path.read_text(encoding="utf-8")
 
 
 def test_dashboard_render_helper_with_loaded_data(tmp_path):

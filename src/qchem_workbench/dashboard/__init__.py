@@ -47,6 +47,10 @@ from qchem_workbench.dashboard.quality import (
     quality_check_rows,
     quality_summary_rows,
 )
+from qchem_workbench.dashboard.report import (
+    generate_dashboard_markdown_report,
+    write_dashboard_markdown_report,
+)
 from qchem_workbench.dashboard.structures import (
     dashboard_structure_rows,
     formula_from_atoms,
@@ -85,6 +89,7 @@ __all__ = [
     "failed_calculation_rows",
     "final_coverage_rows",
     "formula_from_atoms",
+    "generate_dashboard_markdown_report",
     "incomplete_analysis_rows",
     "loaded_file_rows",
     "load_dashboard_config",
@@ -106,4 +111,5 @@ __all__ = [
     "run_dashboard",
     "steady_state_warning_rows",
     "table_rows_to_csv",
+    "write_dashboard_markdown_report",
 ]
