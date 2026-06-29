@@ -7,6 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from qchem_workbench.dashboard.data import DashboardData, load_dashboard_data
+from qchem_workbench.dashboard.active_learning import (
+    active_learning_dataset_rows,
+    active_learning_missing_descriptor_rows,
+    active_learning_quality_flag_rows,
+    active_learning_ranking_rows,
+    active_learning_state_rows,
+)
 from qchem_workbench.dashboard.molecular import (
     PROPERTY_TABLE_TYPES,
     molecular_property_rows,
@@ -251,6 +258,33 @@ def render_dashboard(
                 st.table(steady_warnings)
             _render_microkinetic_table(st, "Rates and TOF", microkinetic_sections["rates"])
             _render_microkinetic_table(st, "Sensitivity", microkinetic_sections["sensitivity"])
+
+        active_rows = active_learning_dataset_rows(data)
+        active_state = active_learning_state_rows(data)
+        if active_rows or active_state:
+            st.header("Active learning")
+            st.caption(
+                "Active-learning tables show explicit descriptors, objectives, "
+                "state, and proposal bookkeeping. Discovery success is not inferred."
+            )
+            if active_state:
+                st.subheader("Candidate counts by state")
+                st.table(active_state)
+            if active_rows:
+                st.subheader("Descriptor dataset")
+                st.table(active_rows)
+                missing_descriptor_rows = active_learning_missing_descriptor_rows(active_rows)
+                if missing_descriptor_rows:
+                    st.subheader("Missing descriptor summary")
+                    st.table(missing_descriptor_rows)
+                quality_flag_rows = active_learning_quality_flag_rows(active_rows)
+                if quality_flag_rows:
+                    st.subheader("Quality flags")
+                    st.table(quality_flag_rows)
+                ranking_rows = active_learning_ranking_rows(active_rows)
+                if ranking_rows:
+                    st.subheader("Ranking")
+                    st.table(ranking_rows)
 
 
 def _import_streamlit() -> Any:

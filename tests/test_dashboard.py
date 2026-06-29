@@ -5,11 +5,24 @@ import importlib.util
 import pytest
 
 from qchem_workbench.cli import main
+from qchem_workbench.active_learning.objectives import load_objective_spec
+from qchem_workbench.active_learning.proposals import ProposedCandidate
+from qchem_workbench.active_learning.state import load_campaign_state
 from qchem_workbench.dashboard.app import (
     DashboardConfig,
     MissingStreamlitError,
     load_dashboard_config,
     render_dashboard,
+)
+from qchem_workbench.dashboard.active_learning import (
+    active_learning_dataset_rows,
+    active_learning_missing_descriptor_rows,
+    active_learning_objective_rows,
+    active_learning_proposal_rows,
+    active_learning_quality_flag_rows,
+    active_learning_ranking_rows,
+    active_learning_state_rows,
+    active_learning_transition_rows,
 )
 from qchem_workbench.dashboard.data import load_dashboard_data
 from qchem_workbench.dashboard.data import DashboardData, DashboardSection
@@ -442,6 +455,60 @@ def test_dashboard_missing_microkinetic_output_is_not_fatal(tmp_path):
     assert data.missing_sections == ("microkinetic_output[1]",)
 
 
+def test_dashboard_active_learning_state_and_dataset_rows(tmp_path):
+    dataset_path = _write_active_learning_dataset(tmp_path)
+    state_path = _write_active_learning_state(tmp_path)
+
+    data = load_dashboard_data(
+        active_learning_datasets=(dataset_path,),
+        active_learning_state=state_path,
+    )
+
+    assert active_learning_state_rows(data)[0]["state"] == "completed"
+    assert active_learning_dataset_rows(data)[0]["candidate_id"] == "cand_001"
+
+
+def test_dashboard_active_learning_ranking_and_missing_rows(tmp_path):
+    dataset_path = _write_active_learning_dataset(tmp_path)
+    data = load_dashboard_data(active_learning_datasets=(dataset_path,))
+    rows = active_learning_dataset_rows(data)
+
+    ranking = active_learning_ranking_rows(rows)
+    missing = active_learning_missing_descriptor_rows(rows)
+    quality = active_learning_quality_flag_rows(rows)
+
+    assert ranking[0]["candidate_id"] == "cand_001"
+    assert "score_component_ads" in ranking[0]["score_components"]
+    assert missing[0]["candidate_id"] == "cand_002"
+    assert quality[0]["quality_flags"] == "missing_descriptor"
+
+
+def test_dashboard_active_learning_objectives_and_proposals(tmp_path):
+    objectives = load_objective_spec(_write_objectives(tmp_path))
+    objective_rows = active_learning_objective_rows(objectives)
+    missing_objectives = active_learning_objective_rows(None)
+    proposals = active_learning_proposal_rows(
+        (
+            ProposedCandidate(candidate_id="cand_002", proposal_rank=2),
+            ProposedCandidate(candidate_id="cand_001", proposal_rank=1),
+        )
+    )
+
+    assert objective_rows["objectives"][0]["direction"] == "minimise"
+    assert objective_rows["constraints"][0]["op"] == "equals"
+    assert missing_objectives["warnings"]
+    assert proposals[0]["candidate_id"] == "cand_001"
+
+
+def test_dashboard_active_learning_transition_rows(tmp_path):
+    state = load_campaign_state(_write_active_learning_state(tmp_path, with_audit=True))
+
+    rows = active_learning_transition_rows(state)
+
+    assert rows[0]["candidate_id"] == "cand_001"
+    assert rows[0]["to_state"] == "completed"
+
+
 def test_dashboard_render_helper_with_loaded_data(tmp_path):
     fake = _FakeStreamlit()
     config = DashboardConfig(project_name="demo")
@@ -613,6 +680,84 @@ def _write_microkinetic_model(tmp_path):
         "      products:\n"
         "        CO_star: 1\n"
         "      rate_constant_forward: k_ads\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_active_learning_dataset(tmp_path):
+    path = tmp_path / "al_dataset.csv"
+    _write_csv(
+        path,
+        [
+            "candidate_id",
+            "al_rank",
+            "al_score",
+            "al_status",
+            "al_reasons",
+            "score_component_ads",
+            "missing_ads_reason",
+            "ads_quality_flags",
+        ],
+        [
+            {
+                "candidate_id": "cand_001",
+                "al_rank": "1",
+                "al_score": "0.4",
+                "al_status": "ranked",
+                "al_reasons": "",
+                "score_component_ads": "0.4",
+                "missing_ads_reason": "",
+                "ads_quality_flags": "",
+            },
+            {
+                "candidate_id": "cand_002",
+                "al_rank": "",
+                "al_score": "",
+                "al_status": "excluded",
+                "al_reasons": "missing_descriptor",
+                "score_component_ads": "",
+                "missing_ads_reason": "missing_result",
+                "ads_quality_flags": "missing_descriptor",
+            },
+        ],
+    )
+    return path
+
+
+def _write_active_learning_state(tmp_path, *, with_audit: bool = False):
+    audit = (
+        '"audit_log": ['
+        '{"timestamp_utc": "2026-01-01T00:00:00+00:00", '
+        '"candidate_id": "cand_001", "from_state": "pending", '
+        '"to_state": "completed", "reason": "synthetic", "result": "results.json"}]'
+        if with_audit
+        else '"audit_log": []'
+    )
+    path = tmp_path / "campaign_state.json"
+    path.write_text(
+        '{"schema_version": 1, '
+        '"candidates": {"cand_001": {"state": "completed"}}, '
+        f"{audit}"
+        "}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_objectives(tmp_path):
+    path = tmp_path / "objectives.yaml"
+    path.write_text(
+        "schema_version: 1\n"
+        "objectives:\n"
+        "  - id: ads\n"
+        "    source_column: ads_energy_eV\n"
+        "    direction: minimise\n"
+        "constraints:\n"
+        "  - id: clean\n"
+        "    source_column: quality_error_count\n"
+        "    op: equals\n"
+        "    value: 0\n",
         encoding="utf-8",
     )
     return path

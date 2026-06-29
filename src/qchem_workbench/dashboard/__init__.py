@@ -7,6 +7,16 @@ from qchem_workbench.dashboard.app import (
     render_dashboard,
     run_dashboard,
 )
+from qchem_workbench.dashboard.active_learning import (
+    active_learning_dataset_rows,
+    active_learning_missing_descriptor_rows,
+    active_learning_objective_rows,
+    active_learning_proposal_rows,
+    active_learning_quality_flag_rows,
+    active_learning_ranking_rows,
+    active_learning_state_rows,
+    active_learning_transition_rows,
+)
 from qchem_workbench.dashboard.data import (
     DashboardData,
     DashboardFileProvenance,
@@ -59,6 +69,14 @@ __all__ = [
     "DashboardSection",
     "MissingStreamlitError",
     "PROPERTY_TABLE_TYPES",
+    "active_learning_dataset_rows",
+    "active_learning_missing_descriptor_rows",
+    "active_learning_objective_rows",
+    "active_learning_proposal_rows",
+    "active_learning_quality_flag_rows",
+    "active_learning_ranking_rows",
+    "active_learning_state_rows",
+    "active_learning_transition_rows",
     "adsorption_energy_rows",
     "backend_method_basis_rows",
     "che_correction_display_rows",
