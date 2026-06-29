@@ -106,6 +106,7 @@ from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.core.species import Species
 from qchem_workbench.campaigns import load_campaign_manifest
 from qchem_workbench.core.structure import AtomisticStructure
+from qchem_workbench.dashboard.app import MissingStreamlitError, run_dashboard
 from qchem_workbench.microkinetics.parameters import (
     load_rate_parameter_set,
     rate_parameter_set_from_mapping,
@@ -708,6 +709,19 @@ def build_parser() -> argparse.ArgumentParser:
     run_project_parser.add_argument("manifest", type=Path)
     run_project_parser.set_defaults(func=_run_project_command)
 
+    dashboard_parser = subparsers.add_parser(
+        "dashboard", help="launch the optional read-only Streamlit dashboard"
+    )
+    dashboard_parser.add_argument("--project", type=Path)
+    dashboard_parser.add_argument(
+        "--results",
+        action="append",
+        default=[],
+        type=Path,
+        help="result store path to load when no project manifest is used",
+    )
+    dashboard_parser.set_defaults(func=_dashboard_command)
+
     triage_parser = subparsers.add_parser(
         "triage", help="generate a failed-job triage Markdown report"
     )
@@ -746,6 +760,15 @@ def _validate_command(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Validated {len(species)} species in {args.registry}.")
+    return 0
+
+
+def _dashboard_command(args: argparse.Namespace) -> int:
+    try:
+        run_dashboard(project=args.project, results=tuple(args.results))
+    except (OSError, ValueError, MissingStreamlitError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

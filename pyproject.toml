@@ -25,6 +25,9 @@ ase = [
 bo-forge = [
   "bo-forge>=0",
 ]
+dashboard = [
+  "streamlit>=1.30",
+]
 dev = [
   "pytest",
   "ruff",
