@@ -12,6 +12,11 @@ from qchem_workbench.dashboard.app import (
     render_dashboard,
 )
 from qchem_workbench.dashboard.data import load_dashboard_data
+from qchem_workbench.dashboard.molecular import (
+    molecular_property_rows,
+    molecular_result_rows,
+    table_rows_to_csv,
+)
 from qchem_workbench.dashboard.overview import (
     backend_method_basis_rows,
     missing_data_rows,
@@ -21,6 +26,16 @@ from qchem_workbench.dashboard.quality import (
     failed_calculation_rows,
     quality_check_rows,
     quality_summary_rows,
+)
+from qchem_workbench.core.properties import (
+    AtomicCharge,
+    CalculationProperties,
+    DipoleMoment,
+    ExcitedState,
+    MolecularOrbital,
+    OrbitalTable,
+    PopulationAnalysis,
+    VibrationalMode,
 )
 from qchem_workbench.core.result import CalculationResult
 from qchem_workbench.results.store import save_result_collection
@@ -204,6 +219,43 @@ def test_dashboard_failed_calculation_rows(tmp_path):
     assert failed[0]["species"] == "failed_species"
 
 
+def test_dashboard_molecular_result_rows_filter_and_missing_values(tmp_path):
+    data = _dashboard_data_with_results(tmp_path)
+
+    rows = molecular_result_rows(data, species="water", backend="gaussian")
+
+    assert len(rows) == 1
+    assert rows[0]["electronic_energy_hartree"] == -76.0
+    assert "gibbs_free_energy_hartree" in rows[0]["missing_values"]
+
+
+def test_dashboard_molecular_property_rows(tmp_path):
+    data = _dashboard_data_with_properties(tmp_path)
+
+    assert molecular_property_rows(data, "dipoles")[0]["total_debye"] == 1.2
+    assert molecular_property_rows(data, "charges")[0]["scheme"] == "Mulliken"
+    assert molecular_property_rows(data, "orbitals")[0]["energy_ev"] == -8.0
+    assert molecular_property_rows(data, "vibrations")[0]["frequency_cm1"] == 1600.0
+    assert molecular_property_rows(data, "excitations")[0]["energy_ev"] == 3.1
+
+
+def test_dashboard_molecular_table_csv_export(tmp_path):
+    data = _dashboard_data_with_results(tmp_path)
+    rows = molecular_result_rows(data)
+
+    csv_text = table_rows_to_csv(rows)
+
+    assert "electronic_energy_hartree" in csv_text
+    assert "water" in csv_text
+
+
+def test_dashboard_molecular_property_unknown_type_is_error(tmp_path):
+    data = _dashboard_data_with_results(tmp_path)
+
+    with pytest.raises(ValueError, match="unsupported molecular property"):
+        molecular_property_rows(data, "redox_potentials")
+
+
 def test_dashboard_render_helper_with_loaded_data(tmp_path):
     fake = _FakeStreamlit()
     config = DashboardConfig(project_name="demo")
@@ -236,6 +288,9 @@ class _FakeStreamlit:
 
     def table(self, rows):
         self.calls.append(("table", rows))
+
+    def download_button(self, label, data, file_name, mime):
+        self.calls.append(("download_button", label, file_name, mime, data))
 
 
 def _write_project(tmp_path):
@@ -275,6 +330,62 @@ def _dashboard_data_with_results(tmp_path):
                 success=False,
                 warnings=["Synthetic failure fixture"],
             ),
+        ],
+    )
+    return load_dashboard_data(results=(result_path,))
+
+
+def _dashboard_data_with_properties(tmp_path):
+    result_path = tmp_path / "property_results.json"
+    save_result_collection(
+        result_path,
+        [
+            CalculationResult(
+                species_name="water",
+                backend="gaussian",
+                method="B3LYP",
+                basis="def2-SVP",
+                task="freq",
+                success=True,
+                electronic_energy_hartree=-76.0,
+                properties=CalculationProperties(
+                    dipole_moment=DipoleMoment(total_debye=1.2),
+                    population_analyses=(
+                        PopulationAnalysis(
+                            scheme="Mulliken",
+                            atomic_charges=(
+                                AtomicCharge(
+                                    atom_index=1,
+                                    symbol="O",
+                                    charge_e=-0.4,
+                                    scheme="Mulliken",
+                                ),
+                            ),
+                        ),
+                    ),
+                    orbital_table=OrbitalTable(
+                        backend="gaussian",
+                        orbitals=(
+                            MolecularOrbital(index=1, energy_ev=-8.0, occupation=2.0),
+                        ),
+                        homo_index=1,
+                    ),
+                    vibrational_modes=(
+                        VibrationalMode(
+                            mode_index=1,
+                            frequency_cm1=1600.0,
+                            ir_intensity_km_mol=10.0,
+                        ),
+                    ),
+                    excitations=(
+                        ExcitedState(
+                            state_index=1,
+                            energy_ev=3.1,
+                            wavelength_nm=400.0,
+                        ),
+                    ),
+                ),
+            )
         ],
     )
     return load_dashboard_data(results=(result_path,))

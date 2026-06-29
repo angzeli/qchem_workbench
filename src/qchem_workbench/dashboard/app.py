@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from qchem_workbench.dashboard.data import DashboardData, load_dashboard_data
+from qchem_workbench.dashboard.molecular import (
+    PROPERTY_TABLE_TYPES,
+    molecular_property_rows,
+    molecular_result_rows,
+    table_rows_to_csv,
+)
 from qchem_workbench.dashboard.overview import (
     backend_method_basis_rows,
     loaded_file_rows,
@@ -153,6 +159,36 @@ def render_dashboard(
         if failed_rows:
             st.subheader("Failed calculations")
             st.table(failed_rows)
+
+        st.header("Molecular results")
+        result_rows = molecular_result_rows(data)
+        if result_rows:
+            st.table(result_rows)
+            st.download_button(
+                "Download molecular results CSV",
+                table_rows_to_csv(result_rows),
+                file_name="qchemwb_molecular_results.csv",
+                mime="text/csv",
+            )
+        else:
+            st.caption("No molecular result rows are loaded.")
+
+        st.header("Molecular properties")
+        st.caption(
+            "Property tables show parsed values only. Orbital energies are not "
+            "redox potentials."
+        )
+        for property_type in PROPERTY_TABLE_TYPES:
+            rows = molecular_property_rows(data, property_type)
+            if rows:
+                st.subheader(property_type.replace("_", " ").title())
+                st.table(rows)
+                st.download_button(
+                    f"Download {property_type} CSV",
+                    table_rows_to_csv(rows),
+                    file_name=f"qchemwb_{property_type}.csv",
+                    mime="text/csv",
+                )
 
 
 def _import_streamlit() -> Any:
