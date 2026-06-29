@@ -12,6 +12,7 @@ from qchem_workbench.dashboard.app import (
     render_dashboard,
 )
 from qchem_workbench.dashboard.data import load_dashboard_data
+from qchem_workbench.dashboard.data import DashboardData, DashboardSection
 from qchem_workbench.dashboard.molecular import (
     molecular_property_rows,
     molecular_result_rows,
@@ -26,6 +27,11 @@ from qchem_workbench.dashboard.quality import (
     failed_calculation_rows,
     quality_check_rows,
     quality_summary_rows,
+)
+from qchem_workbench.dashboard.structures import (
+    dashboard_structure_rows,
+    structure_summary_from_xyz,
+    structure_summary_rows,
 )
 from qchem_workbench.dashboard.workflows import (
     adsorption_energy_rows,
@@ -46,6 +52,8 @@ from qchem_workbench.core.properties import (
     VibrationalMode,
 )
 from qchem_workbench.core.result import CalculationResult
+from qchem_workbench.core.geometry import Atom
+from qchem_workbench.core.structure import AtomisticStructure
 from qchem_workbench.results.store import save_result_collection
 
 
@@ -334,6 +342,50 @@ def test_dashboard_che_table_correction_display(tmp_path):
 
     assert che_energy_rows(data)[0]["reaction_id"] == "step_1"
     assert "CHE potential" in che_correction_display_rows(data)[0]["correction_terms"]
+
+
+def test_dashboard_structure_summary_from_xyz(tmp_path):
+    xyz_path = tmp_path / "hydrogen.xyz"
+    xyz_path.write_text("2\nsynthetic hydrogen\nH 0 0 0\nH 0 0 0.7\n", encoding="utf-8")
+
+    rows = structure_summary_from_xyz(xyz_path)
+
+    assert rows[0]["atom_count"] == 2
+    assert rows[0]["formula"] == "H2"
+    assert rows[0]["periodic"] is False
+
+
+def test_dashboard_periodic_structure_summary():
+    structure = AtomisticStructure(
+        atoms=(Atom("Cu", 0.0, 0.0, 0.0),),
+        cell=((2.0, 0.0, 0.0), (0.0, 2.0, 0.0), (0.0, 0.0, 5.0)),
+        pbc=(True, True, False),
+        surface_normal=(0.0, 0.0, 1.0),
+        fixed_atom_indices=(0,),
+    )
+
+    row = structure_summary_rows((structure,))[0]
+
+    assert row["formula"] == "Cu"
+    assert row["pbc"] == "True True False"
+    assert row["cell_volume_angstrom3"] == pytest.approx(20.0)
+    assert row["fixed_atom_indices"] == "0"
+
+
+def test_dashboard_missing_structure_summary():
+    data = DashboardData(
+        loaded_sections=(
+            DashboardSection(
+                name="species",
+                kind="registry",
+                rows=({"name": "missing", "geometry_path": "/no/such/file.xyz"},),
+            ),
+        )
+    )
+
+    rows = dashboard_structure_rows(data)
+
+    assert "could not load structure" in rows[0]["status"]
 
 
 def test_dashboard_render_helper_with_loaded_data(tmp_path):

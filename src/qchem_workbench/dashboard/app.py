@@ -24,6 +24,7 @@ from qchem_workbench.dashboard.quality import (
     quality_check_rows,
     quality_summary_rows,
 )
+from qchem_workbench.dashboard.structures import dashboard_structure_rows
 from qchem_workbench.dashboard.workflows import (
     adsorption_energy_rows,
     che_correction_display_rows,
@@ -216,6 +217,15 @@ def render_dashboard(
             st.subheader("CHE correction terms")
             st.table(che_correction_display_rows(data))
             _render_analysis_warnings(st, "CHE free energies", che_rows)
+
+        structure_rows = dashboard_structure_rows(data)
+        if structure_rows:
+            st.header("Structure summaries")
+            st.caption(
+                "Structure display is read-only. Summaries are starting-point "
+                "metadata, not geometry validation."
+            )
+            st.table(structure_rows)
 
 
 def _import_streamlit() -> Any:

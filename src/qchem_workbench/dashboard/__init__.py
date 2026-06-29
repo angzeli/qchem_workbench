@@ -30,6 +30,12 @@ from qchem_workbench.dashboard.quality import (
     quality_check_rows,
     quality_summary_rows,
 )
+from qchem_workbench.dashboard.structures import (
+    dashboard_structure_rows,
+    formula_from_atoms,
+    structure_summary_from_xyz,
+    structure_summary_rows,
+)
 from qchem_workbench.dashboard.workflows import (
     adsorption_energy_rows,
     che_correction_display_rows,
@@ -50,7 +56,9 @@ __all__ = [
     "backend_method_basis_rows",
     "che_correction_display_rows",
     "che_energy_rows",
+    "dashboard_structure_rows",
     "failed_calculation_rows",
+    "formula_from_atoms",
     "incomplete_analysis_rows",
     "loaded_file_rows",
     "load_dashboard_config",
@@ -64,6 +72,8 @@ __all__ = [
     "quality_summary_rows",
     "reaction_energy_rows",
     "render_dashboard",
+    "structure_summary_from_xyz",
+    "structure_summary_rows",
     "run_dashboard",
     "table_rows_to_csv",
 ]
