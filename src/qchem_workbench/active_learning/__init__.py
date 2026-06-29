@@ -21,6 +21,11 @@ from qchem_workbench.active_learning.objectives import (
     load_objective_spec,
     validate_objective_columns,
 )
+from qchem_workbench.active_learning.scoring import (
+    ScoredDataset,
+    score_dataset_rows,
+    write_scored_dataset_csv,
+)
 from qchem_workbench.active_learning.datasets import (
     ACTIVE_LEARNING_DATASET_SCHEMA_VERSION,
     DESCRIPTOR_SOURCE_TYPES,
@@ -48,10 +53,13 @@ __all__ = [
     "ObjectiveConstraint",
     "ObjectiveDefinition",
     "ObjectiveSpec",
+    "ScoredDataset",
     "load_candidate_registry",
     "load_active_learning_campaign",
     "load_objective_spec",
     "build_active_learning_dataset",
+    "score_dataset_rows",
     "validate_objective_columns",
     "write_descriptor_dataset_csv",
+    "write_scored_dataset_csv",
 ]

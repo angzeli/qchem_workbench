@@ -17,6 +17,11 @@ from qchem_workbench.active_learning.datasets import (
     load_active_learning_campaign,
     write_descriptor_dataset_csv,
 )
+from qchem_workbench.active_learning.objectives import load_objective_spec
+from qchem_workbench.active_learning.scoring import (
+    score_dataset_rows,
+    write_scored_dataset_csv,
+)
 from qchem_workbench.analysis.adsorption import (
     AdsorptionEnergyRow,
     adsorption_electronic_energy_table,
@@ -504,6 +509,16 @@ def build_parser() -> argparse.ArgumentParser:
     active_learning_dataset_parser.add_argument("--out", required=True, type=Path)
     active_learning_dataset_parser.set_defaults(
         func=_active_learning_build_dataset_command
+    )
+    active_learning_score_parser = active_learning_subparsers.add_parser(
+        "score-dataset",
+        help="apply explicit active-learning objective and constraint rules",
+    )
+    active_learning_score_parser.add_argument("dataset", type=Path)
+    active_learning_score_parser.add_argument("objectives", type=Path)
+    active_learning_score_parser.add_argument("--out", required=True, type=Path)
+    active_learning_score_parser.set_defaults(
+        func=_active_learning_score_dataset_command
     )
 
     microkinetics_parser = subparsers.add_parser(
@@ -1260,6 +1275,21 @@ def _active_learning_build_dataset_command(args: argparse.Namespace) -> int:
         f"Wrote active-learning dataset with {len(dataset.rows)} candidate(s) "
         f"and {len(dataset.headers)} column(s) to {args.out}."
     )
+    return 0
+
+
+def _active_learning_score_dataset_command(args: argparse.Namespace) -> int:
+    try:
+        rows, headers = _read_dict_csv(args.dataset)
+        spec = load_objective_spec(args.objectives)
+        scored = score_dataset_rows(rows, headers, spec)
+        write_scored_dataset_csv(scored, args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    ranked = sum(1 for row in scored.rows if row["al_status"] == "ranked")
+    print(f"Wrote scored dataset with {ranked} ranked candidate(s) to {args.out}.")
     return 0
 
 
