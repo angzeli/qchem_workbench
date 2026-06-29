@@ -27,6 +27,12 @@ from qchem_workbench.active_learning.scoring import (
     score_dataset_rows,
     write_scored_dataset_csv,
 )
+from qchem_workbench.active_learning.state import (
+    load_campaign_state,
+    mark_candidate_state,
+    save_campaign_state,
+    state_summary,
+)
 from qchem_workbench.analysis.adsorption import (
     AdsorptionEnergyRow,
     adsorption_electronic_energy_table,
@@ -541,6 +547,38 @@ def build_parser() -> argparse.ArgumentParser:
     active_learning_import_parser.add_argument("proposals", type=Path)
     active_learning_import_parser.add_argument("--out", required=True, type=Path)
     active_learning_import_parser.set_defaults(func=_active_learning_import_proposals_command)
+    active_learning_state_parser = active_learning_subparsers.add_parser(
+        "state",
+        help="inspect or update active-learning campaign state",
+    )
+    active_learning_state_parser.add_argument("state_file", type=Path)
+    state_subparsers = active_learning_state_parser.add_subparsers(
+        dest="state_command",
+        required=True,
+    )
+    state_summary_parser = state_subparsers.add_parser(
+        "summary",
+        help="print candidate counts by state",
+    )
+    state_summary_parser.set_defaults(func=_active_learning_state_summary_command)
+    for command_name, target_state in (
+        ("mark-proposed", "proposed"),
+        ("mark-pending", "pending"),
+        ("mark-completed", "completed"),
+        ("mark-failed", "failed"),
+        ("mark-excluded", "excluded"),
+    ):
+        state_mark_parser = state_subparsers.add_parser(
+            command_name,
+            help=f"mark a candidate as {target_state}",
+        )
+        state_mark_parser.add_argument("candidate_id")
+        state_mark_parser.add_argument("--reason")
+        state_mark_parser.add_argument("--result")
+        state_mark_parser.set_defaults(
+            func=_active_learning_state_mark_command,
+            target_state=target_state,
+        )
 
     microkinetics_parser = subparsers.add_parser(
         "microkinetics",
@@ -1342,6 +1380,38 @@ def _active_learning_import_proposals_command(args: argparse.Namespace) -> int:
 
     print(f"Imported {len(summary.proposals)} proposed candidate(s).")
     print(f"Wrote calculation TODO manifest to {args.out}.")
+    return 0
+
+
+def _active_learning_state_summary_command(args: argparse.Namespace) -> int:
+    try:
+        state = load_campaign_state(args.state_file)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print("state\tcount")
+    for label, count in state_summary(state).items():
+        print(f"{label}\t{count}")
+    return 0
+
+
+def _active_learning_state_mark_command(args: argparse.Namespace) -> int:
+    try:
+        state = load_campaign_state(args.state_file)
+        updated = mark_candidate_state(
+            state,
+            args.candidate_id,
+            args.target_state,
+            reason=args.reason,
+            result=args.result,
+        )
+        save_campaign_state(args.state_file, updated)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Marked {args.candidate_id} as {args.target_state}.")
     return 0
 
 
