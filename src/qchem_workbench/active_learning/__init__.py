@@ -26,6 +26,11 @@ from qchem_workbench.active_learning.scoring import (
     score_dataset_rows,
     write_scored_dataset_csv,
 )
+from qchem_workbench.active_learning.bo_forge import (
+    BO_FORGE_INTERCHANGE_SCHEMA_VERSION,
+    BOForgeExportSummary,
+    export_bo_forge_interchange,
+)
 from qchem_workbench.active_learning.datasets import (
     ACTIVE_LEARNING_DATASET_SCHEMA_VERSION,
     DESCRIPTOR_SOURCE_TYPES,
@@ -41,6 +46,7 @@ __all__ = [
     "ACTIVE_LEARNING_CANDIDATE_SCHEMA_VERSION",
     "ACTIVE_LEARNING_DATASET_SCHEMA_VERSION",
     "ACTIVE_LEARNING_OBJECTIVE_SCHEMA_VERSION",
+    "BO_FORGE_INTERCHANGE_SCHEMA_VERSION",
     "DESCRIPTOR_SOURCE_TYPES",
     "SUPPORTED_CONSTRAINT_OPERATORS",
     "SUPPORTED_CANDIDATE_TYPES",
@@ -54,11 +60,13 @@ __all__ = [
     "ObjectiveDefinition",
     "ObjectiveSpec",
     "ScoredDataset",
+    "BOForgeExportSummary",
     "load_candidate_registry",
     "load_active_learning_campaign",
     "load_objective_spec",
     "build_active_learning_dataset",
     "score_dataset_rows",
+    "export_bo_forge_interchange",
     "validate_objective_columns",
     "write_descriptor_dataset_csv",
     "write_scored_dataset_csv",

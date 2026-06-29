@@ -17,6 +17,7 @@ from qchem_workbench.active_learning.datasets import (
     load_active_learning_campaign,
     write_descriptor_dataset_csv,
 )
+from qchem_workbench.active_learning.bo_forge import export_bo_forge_interchange
 from qchem_workbench.active_learning.objectives import load_objective_spec
 from qchem_workbench.active_learning.scoring import (
     score_dataset_rows,
@@ -520,6 +521,14 @@ def build_parser() -> argparse.ArgumentParser:
     active_learning_score_parser.set_defaults(
         func=_active_learning_score_dataset_command
     )
+    active_learning_export_parser = active_learning_subparsers.add_parser(
+        "export-bo-forge",
+        help="export a file-based BO Forge interchange folder",
+    )
+    active_learning_export_parser.add_argument("campaign", type=Path)
+    active_learning_export_parser.add_argument("dataset", type=Path)
+    active_learning_export_parser.add_argument("--out", required=True, type=Path)
+    active_learning_export_parser.set_defaults(func=_active_learning_export_bo_forge_command)
 
     microkinetics_parser = subparsers.add_parser(
         "microkinetics",
@@ -1290,6 +1299,23 @@ def _active_learning_score_dataset_command(args: argparse.Namespace) -> int:
 
     ranked = sum(1 for row in scored.rows if row["al_status"] == "ranked")
     print(f"Wrote scored dataset with {ranked} ranked candidate(s) to {args.out}.")
+    return 0
+
+
+def _active_learning_export_bo_forge_command(args: argparse.Namespace) -> int:
+    try:
+        campaign = load_active_learning_campaign(args.campaign)
+        rows, headers = _read_dict_csv(args.dataset)
+        summary = export_bo_forge_interchange(campaign, rows, headers, args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote BO Forge interchange folder to {summary.output_dir}.")
+    print(f"candidates\t{summary.candidate_count}")
+    print(f"observations\t{summary.observation_count}")
+    for warning in summary.warnings:
+        print(f"warning\t{warning}")
     return 0
 
 
