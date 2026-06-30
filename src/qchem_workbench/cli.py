@@ -109,6 +109,7 @@ from qchem_workbench.core.structure import AtomisticStructure
 from qchem_workbench.dashboard.app import MissingStreamlitError, run_dashboard
 from qchem_workbench.dashboard.data import load_dashboard_data
 from qchem_workbench.dashboard.report import write_dashboard_markdown_report
+from qchem_workbench.db import ProjectDatabase, ProjectDatabaseSchemaError
 from qchem_workbench.microkinetics.parameters import (
     load_rate_parameter_set,
     rate_parameter_set_from_mapping,
@@ -209,6 +210,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="write migrations when a future migration implementation supports it",
     )
     schema_check_parser.set_defaults(func=_schema_check_command)
+
+    db_parser = subparsers.add_parser(
+        "db", help="manage an explicit local SQLite project database"
+    )
+    db_subparsers = db_parser.add_subparsers(dest="db_command", required=True)
+    db_init_parser = db_subparsers.add_parser(
+        "init", help="initialise a local SQLite project database"
+    )
+    db_init_parser.add_argument("path", type=Path)
+    db_init_parser.set_defaults(func=_db_init_command)
+    db_info_parser = db_subparsers.add_parser(
+        "info", help="inspect a qchem-workbench project database"
+    )
+    db_info_parser.add_argument("path", type=Path)
+    db_info_parser.set_defaults(func=_db_info_command)
+    db_check_parser = db_subparsers.add_parser(
+        "check", help="check project database schema support"
+    )
+    db_check_parser.add_argument("path", type=Path)
+    db_check_parser.set_defaults(func=_db_check_command)
 
     backends_parser = subparsers.add_parser(
         "backends", help="list registered backend capabilities"
@@ -811,6 +832,57 @@ def _schema_check_command(args: argparse.Namespace) -> int:
     for problem in report.problems:
         print(f"problem\t{problem}")
     return 0 if report.valid else 1
+
+
+def _db_init_command(args: argparse.Namespace) -> int:
+    try:
+        with ProjectDatabase.connect(args.path, create=True) as database:
+            database.initialise()
+            schema_version = database.schema_version()
+    except (OSError, ProjectDatabaseSchemaError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Initialized project database {args.path}.")
+    print(f"schema_version\t{schema_version}")
+    return 0
+
+
+def _db_info_command(args: argparse.Namespace) -> int:
+    try:
+        with ProjectDatabase.connect(args.path) as database:
+            info = database.info()
+    except (OSError, ProjectDatabaseSchemaError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"path\t{info.path}")
+    print(f"schema_version\t{info.schema_version}")
+    print(f"metadata_count\t{len(info.metadata)}")
+    print(f"project_info_count\t{len(info.project_info)}")
+    print(f"schema_migration_count\t{len(info.schema_migrations)}")
+    for migration in info.schema_migrations:
+        print(
+            "migration\t"
+            f"{migration['version']}\t"
+            f"{migration['applied_at']}\t"
+            f"{migration['description']}"
+        )
+    return 0
+
+
+def _db_check_command(args: argparse.Namespace) -> int:
+    status = ProjectDatabase.check(args.path)
+    print(f"path\t{status.path}")
+    print(f"exists\t{status.exists}")
+    print(f"initialised\t{status.initialised}")
+    schema_version = "" if status.schema_version is None else status.schema_version
+    print(f"schema_version\t{schema_version}")
+    print(f"supported\t{status.supported}")
+    print(f"valid\t{status.valid}")
+    for problem in status.problems:
+        print(f"problem\t{problem}")
+    return 0 if status.valid else 1
 
 
 def _backends_command(args: argparse.Namespace) -> int:
