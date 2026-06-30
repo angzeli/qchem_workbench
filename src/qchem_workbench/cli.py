@@ -110,6 +110,10 @@ from qchem_workbench.dashboard.app import MissingStreamlitError, run_dashboard
 from qchem_workbench.dashboard.data import load_dashboard_data
 from qchem_workbench.dashboard.report import write_dashboard_markdown_report
 from qchem_workbench.db import ProjectDatabase, ProjectDatabaseSchemaError
+from qchem_workbench.materials import (
+    MaterialsStructureIOError,
+    inspect_structure as inspect_materials_structure,
+)
 from qchem_workbench.microkinetics.parameters import (
     load_rate_parameter_set,
     rate_parameter_set_from_mapping,
@@ -251,6 +255,18 @@ def build_parser() -> argparse.ArgumentParser:
     convert_structure_parser.add_argument("input", type=Path)
     convert_structure_parser.add_argument("output", type=Path)
     convert_structure_parser.set_defaults(func=_convert_structure_command)
+
+    materials_parser = subparsers.add_parser(
+        "materials", help="inspect and organise materials structures"
+    )
+    materials_subparsers = materials_parser.add_subparsers(
+        dest="materials_command", required=True
+    )
+    materials_inspect_parser = materials_subparsers.add_parser(
+        "inspect", help="inspect a molecular or periodic structure file"
+    )
+    materials_inspect_parser.add_argument("path", type=Path)
+    materials_inspect_parser.set_defaults(func=_materials_inspect_command)
 
     build_slab_parser = subparsers.add_parser(
         "build-slab", help="build an unrelaxed starting slab with optional ASE"
@@ -924,6 +940,30 @@ def _inspect_structure_command(args: argparse.Namespace) -> int:
         print(f"cell\t{json.dumps(first.cell)}")
     else:
         print("cell\t")
+    return 0
+
+
+def _materials_inspect_command(args: argparse.Namespace) -> int:
+    try:
+        summary = inspect_materials_structure(args.path)
+    except (OSError, MaterialsStructureIOError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"path\t{summary.path}")
+    print(f"detected_format\t{summary.detected_format}")
+    print(f"frames\t{summary.frame_count}")
+    print(f"atoms\t{summary.atom_count}")
+    print(f"formula\t{summary.formula}")
+    print(f"periodic\t{summary.periodic}")
+    print(f"pbc\t{' '.join(str(flag) for flag in summary.pbc)}")
+    print(f"coordinate_unit\t{summary.coordinate_unit}")
+    if summary.cell is not None:
+        print(f"cell_unit\t{summary.cell_unit}")
+        print(f"cell_vectors\t{json.dumps(summary.cell)}")
+    else:
+        print("cell_unit\t")
+        print("cell_vectors\t")
     return 0
 
 
