@@ -2,47 +2,27 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from qchem_workbench.backends.capabilities import (
+    BackendCapabilities,
+    BackendCapability,
+    BackendMetadata,
+    BackendStability,
+    normalize_backend_id,
+)
 
-
-@dataclass(frozen=True)
-class BackendCapabilities:
-    """Backend workflow capabilities advertised to qchem-workbench."""
-
-    input_rendering: bool = False
-    output_parsing: bool = False
-    execution: bool = False
-    molecular_support: bool = False
-    periodic_support: bool = False
-    properties_supported: tuple[str, ...] = ()
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "input_rendering": self.input_rendering,
-            "output_parsing": self.output_parsing,
-            "execution": self.execution,
-            "molecular_support": self.molecular_support,
-            "periodic_support": self.periodic_support,
-            "properties_supported": list(self.properties_supported),
-        }
-
-
-@dataclass(frozen=True)
-class BackendMetadata:
-    """Discoverable metadata for a backend adapter."""
-
-    name: str
-    display_name: str
-    capabilities: BackendCapabilities
-    description: str | None = None
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "name": self.name,
-            "display_name": self.display_name,
-            "description": self.description,
-            "capabilities": self.capabilities.to_dict(),
-        }
+__all__ = [
+    "DEFAULT_BACKEND_REGISTRY",
+    "BackendCapabilities",
+    "BackendCapability",
+    "BackendMetadata",
+    "BackendRegistry",
+    "BackendRegistryError",
+    "BackendStability",
+    "built_in_backend_registry",
+    "get_backend",
+    "list_backends",
+    "register_backend",
+]
 
 
 class BackendRegistryError(KeyError):
@@ -52,24 +32,28 @@ class BackendRegistryError(KeyError):
 class BackendRegistry:
     """Small typed registry for backend capability metadata."""
 
-    def __init__(self, entries: tuple[BackendMetadata, ...] = ()) -> None:
-        self._entries: dict[str, BackendMetadata] = {}
+    def __init__(
+        self,
+        entries: tuple[BackendCapability | BackendMetadata, ...] = (),
+    ) -> None:
+        self._entries: dict[str, BackendCapability] = {}
         for entry in entries:
             self.register(entry)
 
-    def register(self, metadata: BackendMetadata, *, replace: bool = False) -> None:
-        key = _normalize_backend_name(metadata.name)
+    def register(
+        self,
+        metadata: BackendCapability | BackendMetadata,
+        *,
+        replace: bool = False,
+    ) -> None:
+        capability = _coerce_capability(metadata)
+        key = normalize_backend_id(capability.backend_id)
         if key in self._entries and not replace:
-            raise ValueError(f"backend {metadata.name!r} is already registered")
-        self._entries[key] = BackendMetadata(
-            name=key,
-            display_name=metadata.display_name,
-            capabilities=metadata.capabilities,
-            description=metadata.description,
-        )
+            raise ValueError(f"backend {capability.backend_id!r} is already registered")
+        self._entries[key] = capability
 
-    def get(self, name: str) -> BackendMetadata:
-        key = _normalize_backend_name(name)
+    def get(self, name: str) -> BackendCapability:
+        key = normalize_backend_id(name)
         try:
             return self._entries[key]
         except KeyError as exc:
@@ -78,21 +62,26 @@ class BackendRegistry:
                 f"backend {name!r} is not registered; available backends: {available}"
             ) from exc
 
-    def list(self) -> tuple[BackendMetadata, ...]:
+    def list(self) -> tuple[BackendCapability, ...]:
         return tuple(self._entries[name] for name in sorted(self._entries))
 
     def names(self) -> tuple[str, ...]:
         return tuple(entry.name for entry in self.list())
 
     def has(self, name: str) -> bool:
-        return _normalize_backend_name(name) in self._entries
+        return normalize_backend_id(name) in self._entries
 
 
-def _normalize_backend_name(name: str) -> str:
-    normalized = name.strip().lower()
-    if not normalized:
-        raise ValueError("backend name must be nonempty")
-    return normalized
+def _coerce_capability(
+    metadata: BackendCapability | BackendMetadata,
+) -> BackendCapability:
+    if isinstance(metadata, BackendCapability):
+        return metadata
+    if isinstance(metadata, BackendMetadata):
+        return metadata.to_capability()
+    raise TypeError(
+        "backend registry entries must be BackendCapability or BackendMetadata"
+    )
 
 
 def built_in_backend_registry() -> BackendRegistry:
@@ -100,84 +89,118 @@ def built_in_backend_registry() -> BackendRegistry:
 
     return BackendRegistry(
         (
-            BackendMetadata(
-                name="gaussian",
+            BackendCapability(
+                backend_id="gaussian",
                 display_name="Gaussian",
-                capabilities=BackendCapabilities(
-                    input_rendering=True,
-                    output_parsing=True,
-                    execution=False,
-                    molecular_support=True,
-                    periodic_support=False,
-                    properties_supported=(
-                        "electronic_energy",
-                        "thermochemistry",
-                        "dipole_moment",
-                        "population_analysis",
-                        "vibrational_frequencies",
-                        "orbital_energies",
-                        "electronic_excitations",
-                        "spin",
-                    ),
+                can_render_input=True,
+                can_parse_output=True,
+                supports_molecular=True,
+                supports_geometry_optimisation=True,
+                supports_frequency=True,
+                supports_thermochemistry=True,
+                supports_orbitals=True,
+                supports_population_analysis=True,
+                supports_excited_states=True,
+                requires_external_executable=True,
+                properties_supported=(
+                    "electronic_energy",
+                    "thermochemistry",
+                    "dipole_moment",
+                    "population_analysis",
+                    "vibrational_frequencies",
+                    "orbital_energies",
+                    "electronic_excitations",
+                    "spin",
                 ),
                 description=(
-                    "Gaussian input rendering and output parsing; execution is external."
+                    "Gaussian input rendering and output parsing; execution is "
+                    "external."
+                ),
+                notes=(
+                    "qchem-workbench does not execute Gaussian or bundle Gaussian.",
                 ),
             ),
-            BackendMetadata(
-                name="orca",
+            BackendCapability(
+                backend_id="orca",
                 display_name="ORCA",
-                capabilities=BackendCapabilities(
-                    input_rendering=True,
-                    output_parsing=True,
-                    execution=False,
-                    molecular_support=True,
-                    periodic_support=False,
-                    properties_supported=(
-                        "electronic_energy",
-                        "thermochemistry",
-                        "dipole_moment",
-                        "population_analysis",
-                        "vibrational_frequencies",
-                        "orbital_energies",
-                        "electronic_excitations",
-                        "spin",
-                    ),
+                can_render_input=True,
+                can_parse_output=True,
+                supports_molecular=True,
+                supports_geometry_optimisation=True,
+                supports_frequency=True,
+                supports_thermochemistry=True,
+                supports_orbitals=True,
+                supports_population_analysis=True,
+                supports_excited_states=True,
+                requires_external_executable=True,
+                properties_supported=(
+                    "electronic_energy",
+                    "thermochemistry",
+                    "dipole_moment",
+                    "population_analysis",
+                    "vibrational_frequencies",
+                    "orbital_energies",
+                    "electronic_excitations",
+                    "spin",
                 ),
-                description="ORCA input rendering and output parsing; execution is external.",
+                description=(
+                    "ORCA input rendering and output parsing; execution is external."
+                ),
+                notes=("qchem-workbench does not execute ORCA or bundle ORCA.",),
             ),
-            BackendMetadata(
-                name="pyscf",
+            BackendCapability(
+                backend_id="pyscf",
                 display_name="PySCF",
-                capabilities=BackendCapabilities(
-                    input_rendering=False,
-                    output_parsing=False,
-                    execution=True,
-                    molecular_support=True,
-                    periodic_support=False,
-                    properties_supported=("electronic_energy", "orbital_energies"),
-                ),
+                can_execute=True,
+                supports_molecular=True,
+                supports_orbitals=True,
+                required_optional_extra="pyscf",
+                properties_supported=("electronic_energy", "orbital_energies"),
                 description="Optional PySCF single-point execution backend.",
+                notes=("Molecular single-point execution only.",),
             ),
-            BackendMetadata(
-                name="qe",
+            BackendCapability(
+                backend_id="qe",
                 display_name="Quantum ESPRESSO pw.x",
-                capabilities=BackendCapabilities(
-                    input_rendering=True,
-                    output_parsing=True,
-                    execution=False,
-                    molecular_support=True,
-                    periodic_support=True,
-                    properties_supported=(
-                        "total_energy",
-                        "scf_status",
-                        "forces",
-                        "cell",
-                    ),
+                can_render_input=True,
+                can_parse_output=True,
+                supports_molecular=True,
+                supports_periodic=True,
+                supports_geometry_optimisation=True,
+                supports_forces=True,
+                supports_stress=True,
+                requires_external_executable=True,
+                properties_supported=(
+                    "total_energy",
+                    "scf_status",
+                    "forces",
+                    "stress",
+                    "cell",
                 ),
                 description=(
                     "Quantum ESPRESSO pw.x input rendering and output parsing; "
                     "execution is external."
+                ),
+                notes=(
+                    "Capability is limited to pw.x input/output support, not all "
+                    "QE tools.",
+                    "Pseudopotentials are user-provided.",
+                ),
+            ),
+            BackendCapability(
+                backend_id="ase",
+                display_name="ASE helpers",
+                supports_molecular=True,
+                supports_periodic=True,
+                required_optional_extra="ase",
+                stability="experimental",
+                description=(
+                    "Optional ASE adapters and starting-structure helpers; no "
+                    "calculator execution."
+                ),
+                notes=(
+                    "Generated slabs and adsorbate placements are starting geometries "
+                    "requiring human inspection.",
                 ),
             ),
         )
@@ -187,13 +210,17 @@ def built_in_backend_registry() -> BackendRegistry:
 DEFAULT_BACKEND_REGISTRY = built_in_backend_registry()
 
 
-def list_backends() -> tuple[BackendMetadata, ...]:
+def list_backends() -> tuple[BackendCapability, ...]:
     return DEFAULT_BACKEND_REGISTRY.list()
 
 
-def get_backend(name: str) -> BackendMetadata:
+def get_backend(name: str) -> BackendCapability:
     return DEFAULT_BACKEND_REGISTRY.get(name)
 
 
-def register_backend(metadata: BackendMetadata, *, replace: bool = False) -> None:
+def register_backend(
+    metadata: BackendCapability | BackendMetadata,
+    *,
+    replace: bool = False,
+) -> None:
     DEFAULT_BACKEND_REGISTRY.register(metadata, replace=replace)

@@ -115,7 +115,7 @@ given output file contains every property.
 | ORCA | yes | yes | no | yes | no | External ORCA is not bundled or invoked. |
 | PySCF | no | no | optional | yes | no | Requires the optional `pyscf` extra; limited to molecular single points. |
 | Quantum ESPRESSO `pw.x` | yes | yes | no | yes | yes | External QE and pseudopotentials are user-provided. |
-| ASE helpers | file conversion/helpers | no | no calculators | yes | yes | Optional adapter/helper package, not a registered execution backend. |
+| ASE helpers | no | no | no | yes | yes | Optional experimental helper metadata; no calculator execution. |
 
 ## Optional Feature Groups
 
