@@ -10,7 +10,14 @@ import yaml
 
 from qchem_workbench.analysis.reactions import PATHWAY_SCHEMA_VERSION, load_pathway
 from qchem_workbench.campaigns import CAMPAIGN_SCHEMA_VERSION, load_campaign_manifest
-from qchem_workbench.core.registry import SUPPORTED_SCHEMA_VERSION, load_species_registry
+from qchem_workbench.core.registry import (
+    SUPPORTED_SCHEMA_VERSION,
+    load_species_registry,
+)
+from qchem_workbench.microkinetics.schema import (
+    MICROKINETIC_SCHEMA_VERSION,
+    load_microkinetic_model,
+)
 from qchem_workbench.projects.manifest import (
     PROJECT_MANIFEST_SCHEMA_VERSION,
     load_project_manifest,
@@ -27,6 +34,7 @@ SCHEMA_FILE_TYPES = {
     "pathway": PATHWAY_SCHEMA_VERSION,
     "project_manifest": PROJECT_MANIFEST_SCHEMA_VERSION,
     "campaign": CAMPAIGN_SCHEMA_VERSION,
+    "microkinetic_model": MICROKINETIC_SCHEMA_VERSION,
 }
 
 __all__ = [
@@ -145,6 +153,8 @@ def _detect_file_type(data: dict[str, Any]) -> str | None:
         return "project_manifest"
     if "campaign" in data:
         return "campaign"
+    if "microkinetic_model" in data:
+        return "microkinetic_model"
     if "species" in data:
         return "species_registry"
     if "reactions" in data:
@@ -161,6 +171,7 @@ def _validator_for_type(file_type: str) -> Callable[[Path], object]:
         "pathway": load_pathway,
         "project_manifest": load_project_manifest,
         "campaign": load_campaign_manifest,
+        "microkinetic_model": load_microkinetic_model,
     }
     return validators[file_type]
 

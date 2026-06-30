@@ -71,6 +71,11 @@ from qchem_workbench.microkinetics.uncertainty import (
     uncertainty_summary,
     write_uncertainty_csv,
 )
+from qchem_workbench.microkinetics.validation import (
+    MicrokineticValidationCheck,
+    MicrokineticValidationReport,
+    validate_microkinetic_model,
+)
 
 __all__ = [
     "BOLTZMANN_EV_PER_K",
@@ -101,6 +106,8 @@ __all__ = [
     "UncertaintySampleRow",
     "UncertaintySummary",
     "MicrokineticConditions",
+    "MicrokineticValidationCheck",
+    "MicrokineticValidationReport",
     "build_rate_evaluator",
     "load_microkinetic_model",
     "load_microkinetic_conditions",
@@ -120,6 +127,7 @@ __all__ = [
     "microkinetic_sensitivity",
     "microkinetic_uncertainty_sample",
     "uncertainty_summary",
+    "validate_microkinetic_model",
     "write_rate_analysis_csv",
     "write_sensitivity_csv",
     "write_simulation_csv",

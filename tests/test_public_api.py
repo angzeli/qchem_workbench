@@ -6,6 +6,7 @@ import qchem_workbench.backends as backends
 import qchem_workbench.campaigns as campaigns
 import qchem_workbench.core as core
 import qchem_workbench.geometry as geometry
+import qchem_workbench.microkinetics as microkinetics
 import qchem_workbench.projects as projects
 import qchem_workbench.reports as reports
 import qchem_workbench.results as results
@@ -41,5 +42,6 @@ def test_schema_versions_are_consistent():
         "pathway": analysis.PATHWAY_SCHEMA_VERSION,
         "project_manifest": projects.PROJECT_MANIFEST_SCHEMA_VERSION,
         "campaign": campaigns.CAMPAIGN_SCHEMA_VERSION,
+        "microkinetic_model": microkinetics.MICROKINETIC_SCHEMA_VERSION,
     }
     assert set(schema.SCHEMA_FILE_TYPES.values()) == {1}

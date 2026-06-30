@@ -26,6 +26,7 @@ class MicrokineticSpecies:
     id: str
     phase: str
     site_type: str | None = None
+    formula: str | None = None
     notes: str | None = None
     provenance: str | None = None
 
@@ -181,6 +182,7 @@ def _species_group(
         species[species_id] = MicrokineticSpecies(
             id=species_id,
             phase=expected_phase,
+            formula=_optional_str(raw.get("formula")),
             site_type=_optional_str(raw.get("site_type")),
             notes=_optional_str(raw.get("notes")),
             provenance=_optional_str(raw.get("provenance")),

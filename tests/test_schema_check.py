@@ -15,6 +15,7 @@ def test_schema_check_detects_supported_file_types(tmp_path):
     assert reports["pathway"].file_type == "pathway"
     assert reports["project_manifest"].file_type == "project_manifest"
     assert reports["campaign"].file_type == "campaign"
+    assert reports["microkinetic_model"].file_type == "microkinetic_model"
     assert all(report.schema_version == 1 for report in reports.values())
     assert all(report.valid for report in reports.values())
 
@@ -106,10 +107,45 @@ def _schema_files(tmp_path):
         "  results: results.json\n",
         encoding="utf-8",
     )
+    microkinetic_path = tmp_path / "microkinetic_model.yaml"
+    microkinetic_path.write_text(
+        "schema_version: 1\n"
+        "microkinetic_model:\n"
+        "  name: synthetic schema-check model\n"
+        "  site_types:\n"
+        "    - id: star\n"
+        "      total_sites: 1.0\n"
+        "      unit: fraction\n"
+        "  species:\n"
+        "    gas:\n"
+        "      CO_g:\n"
+        "        phase: gas\n"
+        "        formula: CO\n"
+        "    surface:\n"
+        "      CO_star:\n"
+        "        phase: surface\n"
+        "        formula: CO\n"
+        "        site_type: star\n"
+        "  steps:\n"
+        "    - id: co_ads\n"
+        "      reversible: true\n"
+        "      reactants:\n"
+        "        CO_g: 1\n"
+        "        star: 1\n"
+        "      products:\n"
+        "        CO_star: 1\n"
+        "      rate_constant_forward: k_co_ads_f\n"
+        "      rate_constant_reverse: k_co_ads_r\n"
+        "  rate_parameters:\n"
+        "    - k_co_ads_f\n"
+        "    - k_co_ads_r\n",
+        encoding="utf-8",
+    )
     return {
         "species": species_path,
         "result_store": result_path,
         "pathway": pathway_path,
         "project_manifest": project_path,
         "campaign": campaign_path,
+        "microkinetic_model": microkinetic_path,
     }

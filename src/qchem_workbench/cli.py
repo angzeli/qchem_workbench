@@ -140,6 +140,7 @@ from qchem_workbench.microkinetics.uncertainty import (
     parameter_distributions_from_mapping,
     write_uncertainty_csv,
 )
+from qchem_workbench.microkinetics.validation import validate_microkinetic_model
 from qchem_workbench.microkinetics.simulation import (
     SciPyUnavailableError,
     load_microkinetic_conditions,
@@ -640,6 +641,19 @@ def build_parser() -> argparse.ArgumentParser:
         dest="microkinetics_command",
         required=True,
     )
+    microkinetics_validate_parser = microkinetics_subparsers.add_parser(
+        "validate",
+        help="validate a microkinetic model before simulation",
+    )
+    microkinetics_validate_parser.add_argument("model", type=Path)
+    microkinetics_validate_parser.add_argument("--conditions", type=Path)
+    microkinetics_validate_parser.add_argument("--parameters", type=Path)
+    microkinetics_validate_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit machine-readable validation results",
+    )
+    microkinetics_validate_parser.set_defaults(func=_microkinetics_validate_command)
     microkinetics_simulate_parser = microkinetics_subparsers.add_parser(
         "simulate",
         help="simulate surface coverages with optional SciPy",
@@ -1648,6 +1662,46 @@ def _microkinetics_simulate_command(args: argparse.Namespace) -> int:
         print(f"warning\t{warning}")
     print(f"Wrote microkinetic trajectory to {args.out}.")
     return 0 if result.success else 1
+
+
+def _microkinetics_validate_command(args: argparse.Namespace) -> int:
+    try:
+        model = load_microkinetic_model(args.model)
+        conditions = (
+            load_microkinetic_conditions(args.conditions)
+            if args.conditions is not None
+            else None
+        )
+        parameters = None
+        if args.parameters is not None:
+            parameters = load_rate_parameter_set(args.parameters)
+        elif conditions is not None and (
+            conditions.rate_parameters_path is not None
+            or conditions.rate_parameters is not None
+        ):
+            parameters = _load_microkinetic_rate_parameters(conditions)
+        report = validate_microkinetic_model(
+            model,
+            parameters=parameters,
+            initial_coverages=conditions.initial_coverages if conditions else None,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print("severity\tcode\tidentifier\tmessage")
+        for check in report.checks:
+            print(
+                f"{check.severity}\t{check.code}\t"
+                f"{check.identifier}\t{check.message}"
+            )
+        print(f"valid\t{report.valid}")
+        print(f"errors\t{report.error_count}")
+        print(f"warnings\t{report.warning_count}")
+    return 0 if report.valid else 1
 
 
 def _microkinetics_steady_state_command(args: argparse.Namespace) -> int:
